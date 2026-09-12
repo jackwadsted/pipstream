@@ -1,0 +1,10 @@
+{
+  "name": "Pipstream",
+  "short_name": "Pipstream",
+  "description": "Build the chain. Branch the doubles. Score big.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e"
+}

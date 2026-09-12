@@ -11,6 +11,7 @@ import { ScoreScreen } from "./components/ScoreScreen.js";
 import { ScoringAnimation } from "./components/ScoringAnimation.js";
 import { DominoTileHTML } from "./components/DominoTile.js";
 import { computeScore } from "./engine/scoring.js";
+import { useFullscreen } from "./hooks/useFullscreen.js";
 
 const SNAP_RADIUS = 56;
 // DominoTileHTML at size=44: two 44px pip grids + 2px divider
@@ -41,6 +42,7 @@ interface PhysState {
 export function App() {
   const { state, init, reset, place, discard, save, playSaved, playFromHand, reroll, getLegalPointIds } =
     useRunState(null);
+  const { isFullscreen, toggle: toggleFullscreen, isSupported: fullscreenSupported } = useFullscreen();
   const [dragSource, setDragSource] = useState<DragSource | null>(null);
   const [deck, setDeck] = useState<ResolvedDeck | null>(null);
   const [animationDone, setAnimationDone] = useState(false);
@@ -346,6 +348,9 @@ export function App() {
           gap: 16,
         }}
       >
+        {fullscreenSupported && (
+          <FullscreenBtn isFullscreen={isFullscreen} onToggle={toggleFullscreen} dark />
+        )}
         <h1 style={{ fontSize: 40, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>
           Pipstream
         </h1>
@@ -403,6 +408,9 @@ export function App() {
         fontFamily: "system-ui, sans-serif",
       }}
     >
+      {fullscreenSupported && (
+        <FullscreenBtn isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
+      )}
       {showScoreScreen && (
         <ScoreScreen
           state={state}
@@ -454,6 +462,50 @@ export function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function FullscreenBtn({
+  isFullscreen,
+  onToggle,
+  dark,
+}: {
+  isFullscreen: boolean;
+  onToggle: () => void;
+  dark?: boolean;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      style={{
+        position: "fixed",
+        top: 12,
+        right: 12,
+        zIndex: 2000,
+        width: 36,
+        height: 36,
+        padding: 0,
+        background: dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
+        border: dark ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(0,0,0,0.15)",
+        borderRadius: 8,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: dark ? "#fff" : "#444",
+      }}
+    >
+      {isFullscreen ? (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M6 2H2v4M10 2h4v4M6 14H2v-4M10 14h4v-4" />
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
+        </svg>
+      )}
+    </button>
   );
 }
 
