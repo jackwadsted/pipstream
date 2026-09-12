@@ -4,13 +4,14 @@ import { DominoTileHTML } from "./DominoTile.js";
 
 interface HUDProps {
   state: RunState;
+  dragSource?: DragSource | null | undefined;
   onDiscard: () => void;
   onSave: () => void;
   onReroll: () => void;
   onDragStart: (source: DragSource, e: React.PointerEvent<HTMLDivElement>, offset: { x: number; y: number }) => void;
 }
 
-export function HUD({ state, onDiscard, onSave, onReroll, onDragStart }: HUDProps) {
+export function HUD({ state, dragSource, onDiscard, onSave, onReroll, onDragStart }: HUDProps) {
   const { config, pendingTile, savedTiles, drawPile, discardsUsed, savesUsed, status, doubleTriggerLog } = state;
 
   const isDrawFive = state.mode === "draw-five";
@@ -54,6 +55,7 @@ export function HUD({ state, onDiscard, onSave, onReroll, onDragStart }: HUDProp
       {isDrawFive ? (
         <DrawFivePanel
           state={state}
+          dragSource={dragSource}
           onReroll={onReroll}
           onDragStart={onDragStart}
         />
@@ -77,10 +79,12 @@ export function HUD({ state, onDiscard, onSave, onReroll, onDragStart }: HUDProp
 
 function DrawFivePanel({
   state,
+  dragSource,
   onReroll,
   onDragStart,
 }: {
   state: RunState;
+  dragSource?: DragSource | null | undefined;
   onReroll: () => void;
   onDragStart: (source: DragSource, e: React.PointerEvent<HTMLDivElement>, offset: { x: number; y: number }) => void;
 }) {
@@ -137,21 +141,34 @@ function DrawFivePanel({
           <EmptyText>—</EmptyText>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
-            {hand.map((t) => (
-              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <DominoTileHTML
-                  domino={t}
-                  size={44}
-                  {...(state.status === "in-progress" ? {
-                    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
-                      e.preventDefault();
-                      const r = e.currentTarget.getBoundingClientRect();
-                      onDragStart({ kind: "hand", handTileId: t.id }, e, { x: e.clientX - r.left, y: e.clientY - r.top });
-                    },
-                  } : {})}
-                />
-              </div>
-            ))}
+            {hand.map((t) => {
+              const isDragging = dragSource?.kind === "hand" && dragSource.handTileId === t.id;
+              return (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {isDragging ? (
+                    <div style={{
+                      width: 90,
+                      height: 44,
+                      border: "2px dashed #bbb",
+                      borderRadius: 6,
+                      background: "transparent",
+                    }} />
+                  ) : (
+                    <DominoTileHTML
+                      domino={t}
+                      size={44}
+                      {...(state.status === "in-progress" ? {
+                        onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+                          e.preventDefault();
+                          const r = e.currentTarget.getBoundingClientRect();
+                          onDragStart({ kind: "hand", handTileId: t.id }, e, { x: e.clientX - r.left, y: e.clientY - r.top });
+                        },
+                      } : {})}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         {noRoot && hand.length > 0 && state.status === "in-progress" && (

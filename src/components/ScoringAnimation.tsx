@@ -50,6 +50,7 @@ interface AnimationMoment {
   runningTotal: number;
   pipAdditions: PipAddition[];
   multiplierBadge?: MultiplierBadgeData;
+  currentMultiplier: number;
   durationMs: number;
 }
 
@@ -68,20 +69,21 @@ function buildChildrenMap(nodes: Record<string, PlacedNode>): Map<string, string
 }
 
 function getVisitDuration(depth: number): number {
-  return Math.round(Math.max(120, 600 * Math.exp(-0.18 * depth)));
+  return Math.round(Math.max(220, 700 * Math.exp(-0.10 * depth)));
 }
 
 function buildMoments(state: RunState): AnimationMoment[] {
   const { placedNodes, config } = state;
   const root = Object.values(placedNodes).find((n) => n.parentNodeId === null);
   if (!root) {
-    return [{ kind: "done", activeNodeIds: [], visitedNodeIds: [], runningTotal: 0, pipAdditions: [], durationMs: 0 }];
+    return [{ kind: "done", activeNodeIds: [], visitedNodeIds: [], runningTotal: 0, pipAdditions: [], currentMultiplier: 1, durationMs: 0 }];
   }
 
   const childrenMap = buildChildrenMap(placedNodes);
   const moments: AnimationMoment[] = [];
   const visitedSoFar: string[] = [];
   let runningTotal = 0;
+  let cumulativeMultiplier = 1;
   let frontier = [root.id];
   let depth = 0;
 
@@ -92,7 +94,7 @@ function buildMoments(state: RunState): AnimationMoment[] {
       const n = placedNodes[id]!;
       return { nodeId: id, pips: n.domino.pips[0] + n.domino.pips[1], x: n.position.x, y: n.position.y };
     });
-    runningTotal += pipAdditions.reduce((s, p) => s + p.pips, 0);
+    runningTotal += pipAdditions.reduce((s, p) => s + p.pips, 0) * cumulativeMultiplier;
     visitedSoFar.push(...frontier);
 
     moments.push({
@@ -101,6 +103,7 @@ function buildMoments(state: RunState): AnimationMoment[] {
       visitedNodeIds: [...visitedSoFar],
       runningTotal,
       pipAdditions,
+      currentMultiplier: cumulativeMultiplier,
       durationMs: duration,
     });
 
@@ -108,13 +111,15 @@ function buildMoments(state: RunState): AnimationMoment[] {
       const n = placedNodes[id]!;
       const children = childrenMap.get(id) ?? [];
       if (n.domino.pips[0] === n.domino.pips[1] && children.length > 0) {
+        cumulativeMultiplier *= config.branchMultiplier;
         moments.push({
           kind: "multiplier",
           activeNodeIds: [id],
           visitedNodeIds: [...visitedSoFar],
           runningTotal,
           pipAdditions: [],
-          multiplierBadge: { nodeId: id, x: n.position.x, y: n.position.y, multiplier: config.branchMultiplier },
+          multiplierBadge: { nodeId: id, x: n.position.x, y: n.position.y, multiplier: cumulativeMultiplier },
+          currentMultiplier: cumulativeMultiplier,
           durationMs: 520,
         });
       }
@@ -130,6 +135,7 @@ function buildMoments(state: RunState): AnimationMoment[] {
     visitedNodeIds: [...visitedSoFar],
     runningTotal,
     pipAdditions: [],
+    currentMultiplier: cumulativeMultiplier,
     durationMs: 700,
   });
 
@@ -200,7 +206,8 @@ function ActiveGlow({ node }: { node: PlacedNode }) {
   );
 }
 
-function PipFloat({ pips, x, y }: { pips: number; x: number; y: number }) {
+function PipFloat({ pips, x, y, multiplier }: { pips: number; x: number; y: number; multiplier: number }) {
+  const label = multiplier > 1 ? `+${pips} ×${multiplier}` : `+${pips}`;
   return (
     <text
       x={x}
@@ -220,7 +227,7 @@ function PipFloat({ pips, x, y }: { pips: number; x: number; y: number }) {
         fontFamily: "system-ui, sans-serif",
       }}
     >
-      +{pips}
+      {label}
     </text>
   );
 }
@@ -264,16 +271,50 @@ function MultiplierBadge({ x, y, multiplier }: { x: number; y: number; multiplie
 
 function RunningTotal({
   total,
+  multiplier,
   activeNodeIds,
   placedNodes,
 }: {
   total: number;
+  multiplier: number;
   activeNodeIds: string[];
   placedNodes: Record<string, PlacedNode>;
 }) {
+  const [displayed, setDisplayed] = useState(total);
+  const animRef = useRef<number | null>(null);
+  const prevTotalRef = useRef(total);
+
+  useEffect(() => {
+    const start = prevTotalRef.current;
+    const end = total;
+    prevTotalRef.current = end;
+    if (animRef.current !== null) cancelAnimationFrame(animRef.current);
+    if (start === end) return;
+    const duration = 280;
+    const startTime = performance.now();
+    const step = () => {
+      const t = Math.min(1, (performance.now() - startTime) / duration);
+      const eased = t * (2 - t);
+      setDisplayed(Math.round(start + (end - start) * eased));
+      if (t < 1) {
+        animRef.current = requestAnimationFrame(step);
+      } else {
+        animRef.current = null;
+      }
+    };
+    animRef.current = requestAnimationFrame(step);
+    return () => {
+      if (animRef.current !== null) {
+        cancelAnimationFrame(animRef.current);
+        animRef.current = null;
+      }
+    };
+  }, [total]);
+
   const cx = activeNodeIds.reduce((s, id) => s + placedNodes[id]!.position.x, 0) / activeNodeIds.length;
   const cy = activeNodeIds.reduce((s, id) => s + placedNodes[id]!.position.y, 0) / activeNodeIds.length;
-  const lw = Math.max(56, String(total).length * 12 + 24);
+  const label = multiplier > 1 ? `${displayed} ×${multiplier}` : `${displayed}`;
+  const lw = Math.max(56, label.length * 11 + 24);
   const lh = 28;
   const ly = cy + 38;
   return (
@@ -285,8 +326,8 @@ function RunningTotal({
         height={lh}
         rx={lh / 2}
         fill="rgba(20,20,38,0.9)"
-        stroke="rgba(255,255,255,0.18)"
-        strokeWidth={1}
+        stroke={multiplier > 1 ? "rgba(255,107,53,0.6)" : "rgba(255,255,255,0.18)"}
+        strokeWidth={multiplier > 1 ? 1.5 : 1}
       />
       <text
         x={cx}
@@ -298,7 +339,7 @@ function RunningTotal({
         fill="#fff"
         style={{ fontFamily: "system-ui, sans-serif", fontVariantNumeric: "tabular-nums" }}
       >
-        {total}
+        {label}
       </text>
     </g>
   );
@@ -348,7 +389,7 @@ export function ScoringAnimation({ state, onDone }: { state: RunState; onDone: (
       ))}
 
       {m.pipAdditions.map(({ nodeId, pips, x, y }) => (
-        <PipFloat key={`${nodeId}-${idx}`} pips={pips} x={x} y={y} />
+        <PipFloat key={`${nodeId}-${idx}`} pips={pips} x={x} y={y} multiplier={m.currentMultiplier} />
       ))}
 
       {m.multiplierBadge && (
@@ -361,6 +402,7 @@ export function ScoringAnimation({ state, onDone }: { state: RunState; onDone: (
       {m.activeNodeIds.length > 0 && (
         <RunningTotal
           total={m.runningTotal}
+          multiplier={m.currentMultiplier}
           activeNodeIds={m.activeNodeIds}
           placedNodes={state.placedNodes}
         />

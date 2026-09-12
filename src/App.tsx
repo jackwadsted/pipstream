@@ -476,6 +476,7 @@ export function App() {
         />
         <HUD
           state={state}
+          dragSource={dragSource}
           onDiscard={discard}
           onSave={save}
           onReroll={reroll}
