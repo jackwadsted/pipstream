@@ -4,11 +4,13 @@ import type { GameMode, RunState } from "./engine/types.js";
 import type { ResolvedDeck } from "./schemas/deck.js";
 import { useRunState } from "./hooks/useRunState.js";
 import { loadDeckBrowser } from "./dataBundle.js";
-import { RadialTree } from "./components/RadialTree.js";
-import type { RadialTreeHandle } from "./components/RadialTree.js";
+import { DominoBoard } from "./components/DominoBoard.js";
+import type { DominoBoardHandle } from "./components/DominoBoard.js";
 import { HUD } from "./components/HUD.js";
 import { ScoreScreen } from "./components/ScoreScreen.js";
 import { ScoringAnimation } from "./components/ScoringAnimation.js";
+import { Leaderboard } from "./components/Leaderboard.js";
+import { getLeaderboard, addEntry } from "./lib/leaderboard.js";
 import { DominoTileHTML } from "./components/DominoTile.js";
 import { computeScore } from "./engine/scoring.js";
 import { useFullscreen } from "./hooks/useFullscreen.js";
@@ -46,6 +48,7 @@ export function App() {
   const [dragSource, setDragSource] = useState<DragSource | null>(null);
   const [deck, setDeck] = useState<ResolvedDeck | null>(null);
   const [animationDone, setAnimationDone] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   // Ghost tile — just visibility flags; position/rotation live in physRef and are DOM-applied by RAF
   const [ghostVisible, setGhostVisible] = useState(false);
@@ -55,7 +58,7 @@ export function App() {
   const [snapPointId, setSnapPointId] = useState<string | null>(null);
 
   // Refs
-  const radialTreeRef = useRef<RadialTreeHandle>(null);
+  const dominoBoardRef = useRef<DominoBoardHandle>(null);
   const ghostRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const dragPointerIdRef = useRef<number | null>(null);
@@ -221,7 +224,7 @@ export function App() {
     function updateSnap(cx: number, cy: number) {
       const src = dragSourceRef.current;
       const st = stateRef.current;
-      if (!src || !st || !radialTreeRef.current) {
+      if (!src || !st || !dominoBoardRef.current) {
         physRef.current.isSnapping = false;
         setSnapPointId(null);
         return;
@@ -232,7 +235,7 @@ export function App() {
       let bestSP: { x: number; y: number } | null = null;
 
       if (Object.keys(st.placedNodes).length === 0 && (src.kind === "pending" || src.kind === "hand")) {
-        const sp = radialTreeRef.current.getScreenPos(0, 0);
+        const sp = dominoBoardRef.current.getScreenPos(0, 0);
         if (sp) {
           const d = Math.hypot(cx - sp.x, cy - sp.y);
           if (d < bestDist) { bestDist = d; bestId = "root"; bestSP = sp; }
@@ -240,7 +243,7 @@ export function App() {
       }
       for (const pt of Object.values(st.openConnectionPoints)) {
         if (!legal.has(pt.id)) continue;
-        const sp = radialTreeRef.current.getScreenPos(pt.position.x, pt.position.y);
+        const sp = dominoBoardRef.current.getScreenPos(pt.position.x, pt.position.y);
         if (!sp) continue;
         const d = Math.hypot(cx - sp.x, cy - sp.y);
         if (d < bestDist) { bestDist = d; bestId = pt.id; bestSP = sp; }
@@ -345,6 +348,7 @@ export function App() {
     ];
 
     return (
+      <>
       <div
         style={{
           display: "flex",
@@ -404,6 +408,23 @@ export function App() {
                 description="Draw tiles one by one. Save or discard to manage your hand."
               />
             </div>
+            <button
+              onClick={() => setShowLeaderboard(true)}
+              style={{
+                marginTop: 4,
+                padding: "8px 24px",
+                background: "transparent",
+                color: "#aaa",
+                border: "1px solid #444",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                letterSpacing: "0.02em",
+              }}
+            >
+              High Scores
+            </button>
           </div>
         )}
         <div style={{ maxWidth: 520, width: "100%", padding: "0 16px", marginTop: 8 }}>
@@ -437,6 +458,41 @@ export function App() {
           </ol>
         </div>
       </div>
+
+      {/* Leaderboard overlay */}
+      {showLeaderboard && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.65)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            fontFamily: "system-ui, sans-serif",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "32px 40px",
+              maxWidth: 560,
+              width: "90%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
+            }}
+          >
+            <Leaderboard
+              entries={getLeaderboard()}
+              onClose={() => setShowLeaderboard(false)}
+            />
+          </div>
+        </div>
+      )}
+      </>
     );
   }
 
@@ -458,12 +514,21 @@ export function App() {
           state={state}
           scoreResult={scoreResult!}
           onPlayAgain={reset}
+          onMainMenu={reset}
+          onSaveScore={(name) =>
+            addEntry({
+              name,
+              score: scoreResult!.totalScore,
+              mode: state.mode ?? "save-discard",
+              date: new Date().toISOString(),
+            })
+          }
         />
       )}
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <RadialTree
-          ref={radialTreeRef}
+        <DominoBoard
+          ref={dominoBoardRef}
           state={state}
           dragSource={dragSource}
           legalPointIds={legalPointIds}

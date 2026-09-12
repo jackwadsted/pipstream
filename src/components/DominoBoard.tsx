@@ -27,11 +27,11 @@ function dirToLayoutAngle(dir: Direction): number {
   }
 }
 
-export interface RadialTreeHandle {
+export interface DominoBoardHandle {
   getScreenPos(svgX: number, svgY: number): { x: number; y: number } | null;
 }
 
-interface RadialTreeProps {
+interface DominoBoardProps {
   state: RunState;
   dragSource: DragSource | null;
   legalPointIds: Set<string>;
@@ -39,7 +39,7 @@ interface RadialTreeProps {
   animationOverlay?: ReactNode;
 }
 
-export const RadialTree = forwardRef<RadialTreeHandle, RadialTreeProps>(function RadialTree({
+export const DominoBoard = forwardRef<DominoBoardHandle, DominoBoardProps>(function DominoBoard({
   state,
   dragSource,
   legalPointIds,

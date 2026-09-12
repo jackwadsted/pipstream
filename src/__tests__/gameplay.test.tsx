@@ -11,7 +11,7 @@ import {
 import type { DragSource } from "../hooks/useRunState.js";
 import { useRunState } from "../hooks/useRunState.js";
 import { HUD } from "../components/HUD.js";
-import { RadialTree } from "../components/RadialTree.js";
+import { DominoBoard } from "../components/DominoBoard.js";
 import type { Domino } from "../schemas/domino.js";
 import type { ResolvedDeck } from "../schemas/deck.js";
 
@@ -25,7 +25,7 @@ function makeDeck(...tiles: Domino[]): ResolvedDeck {
   return { id: "test", name: "Test", tiles: tiles.map((d) => ({ domino: d, quantity: 1 })) };
 }
 
-/** Minimal harness: renders HUD + RadialTree driven by useRunState. */
+/** Minimal harness: renders HUD + DominoBoard driven by useRunState. */
 function GameHarness({ deck }: { deck: ResolvedDeck }) {
   const { state, init, place, discard, save, playSaved, getLegalPointIds } = useRunState(null);
   const [dragSource, setDragSource] = useState<DragSource | null>(null);
@@ -35,7 +35,7 @@ function GameHarness({ deck }: { deck: ResolvedDeck }) {
       <button data-testid="init-btn" onClick={() => init(deck)}>Init</button>
       {state && (
         <>
-          <RadialTree
+          <DominoBoard
             state={state}
             dragSource={dragSource}
             legalPointIds={dragSource ? getLegalPointIds(dragSource) : new Set()}
@@ -270,7 +270,7 @@ describe("drag-to-place: legal and illegal drops", () => {
             <button data-testid="init" onClick={() => hook.init(deck)}>init</button>
             <button data-testid="place-root" onClick={() => hook.place(null)}>root</button>
             {hook.state && (
-              <RadialTree
+              <DominoBoard
                 state={hook.state}
                 dragSource={null}
                 legalPointIds={new Set()}

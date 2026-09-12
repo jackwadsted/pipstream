@@ -24,12 +24,17 @@ pipstream/
     │   ├── scoring.ts         # computeScore() — DFS traversal with branch multipliers
     │   └── tileTransform.ts   # getTileTransform() — pip orientation per branch angle
     ├── hooks/
-    │   └── useRunState.ts     # useReducer wrapper over the placement engine
+    │   ├── useRunState.ts     # useReducer wrapper over the placement engine
+    │   └── useFullscreen.ts   # Fullscreen API wrapper (toggle + isSupported)
+    ├── lib/
+    │   └── leaderboard.ts     # localStorage leaderboard (getLeaderboard / addEntry / clearLeaderboard)
     ├── components/
     │   ├── DominoTile.tsx     # Pip-dot rendering (HTML HUD variant + SVG tree variant)
-    │   ├── RadialTree.tsx     # SVG radial layout with drop targets
+    │   ├── DominoBoard.tsx    # SVG board: pan/zoom, placed tiles, drag-and-drop targets
     │   ├── HUD.tsx            # Pending tile, save/discard controls, saved tile pool
-    │   └── ScoreScreen.tsx    # End-of-run overlay with per-path breakdown
+    │   ├── ScoreScreen.tsx    # End-of-run overlay with per-path breakdown
+    │   ├── ScoringAnimation.tsx # Animated scoring reveal (pip-float + multiplier-pop keyframes)
+    │   └── Leaderboard.tsx    # High-scores table (localStorage-backed, highlights current run)
     ├── dataBundle.ts          # Browser loader — import.meta.glob + Zod, no fs
     ├── loader.ts              # Node loader — fs-based, for tests and build tooling
     ├── App.tsx
@@ -49,7 +54,7 @@ pipstream/
 ```bash
 npm install
 npm run dev       # Vite dev server → http://localhost:5173
-npm test          # Vitest (86 tests)
+npm test          # Vitest
 npm run build     # Production build
 npm run typecheck # tsc --noEmit
 ```
@@ -58,11 +63,14 @@ npm run typecheck # tsc --noEmit
 
 ## How to play
 
-1. **Start Run** — click the button on the title screen to draw the first tile.
-2. **Place** — drag a tile from the HUD onto the tree. The root drop zone accepts the first tile; subsequent tiles connect to any open end on the tree. Green circles = legal connections, red = illegal during a drag.
+1. **Select mode** — choose Save/Discard or Draw Five on the title screen.
+2. **Place** — drag a tile onto the tree. The root drop zone accepts the first tile; subsequent tiles connect to any open end. Green circles = legal connections, red = illegal during a drag. Tiles animate into position when placed.
 3. **Discard** — drop the pending tile without placing it (limit shown in HUD).
-4. **Save / Play Saved** — bank a tile to the save pool (cap shown) and play it later.
-5. **End of run** — when the deck is exhausted (and no saved tiles remain) the score screen appears.
+4. **Save / Play Saved** *(Save/Discard mode)* — bank a tile to the save pool (cap shown) and replay it later.
+5. **Draw Five mode** — you always hold a hand of 5 tiles; drag any tile to place it. Re-rolls are free up to the limit, then cost a penalty discard.
+6. **End of run** — when the deck (and hand) are exhausted, the scoring animation plays, then the score screen with per-path breakdown appears. Enter a name to save your score.
+7. **Leaderboard** — accessible from the title screen; shows the top 100 scores across both modes, stored in `localStorage`.
+8. **Fullscreen** — toggle via the button in the top-right corner (on supported browsers).
 
 ---
 
@@ -141,6 +149,8 @@ Explicit tile list with per-tile quantities (duplicates allowed for roguelike bu
 - **`branchMultiplier` in `GameConfig`** — doubles apply multiplicatively per outgoing branch; the `2` default is a balance placeholder.
 - **`doubleTriggerLog` in `RunState`** — every double placed (root or non-root) is appended here. No side effects yet; exists as a hook point for future power-up activations.
 - **Browser vs Node loaders** — `src/loader.ts` uses `fs` for tests and CI; `src/dataBundle.ts` uses `import.meta.glob` for the browser bundle. Same Zod schemas, no duplication.
+- **Leaderboard in `localStorage`** — top 100 entries sorted by score, keyed `pipstream_leaderboard`. `addEntry` merges, sorts, and trims in one call; safe to call on every run end.
+- **`useFullscreen`** — thin wrapper around the Fullscreen API; `isSupported` guards the button so it's hidden on environments (e.g. iOS Safari) that don't support it.
 
 ---
 
@@ -149,6 +159,5 @@ Explicit tile list with per-tile quantities (duplicates allowed for roguelike bu
 - Power-up effects (trigger log exists; actual effect application does not)
 - Meta-progression and unlocks
 - Player-controlled tile rotation / flipping as a game mechanic
-- Persistence across runs
 - Cosmetic themes
 - **Portrait mobile layout** — HUD should move to a bottom panel; tree gets full width (landscape already works)
