@@ -1,14 +1,42 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import type { DragSource } from "./hooks/useRunState.js";
-import type { GameMode } from "./engine/types.js";
+import type { GameMode, RunState } from "./engine/types.js";
 import type { ResolvedDeck } from "./schemas/deck.js";
 import { useRunState } from "./hooks/useRunState.js";
 import { loadDeckBrowser } from "./dataBundle.js";
 import { RadialTree } from "./components/RadialTree.js";
+import type { RadialTreeHandle } from "./components/RadialTree.js";
 import { HUD } from "./components/HUD.js";
 import { ScoreScreen } from "./components/ScoreScreen.js";
 import { ScoringAnimation } from "./components/ScoringAnimation.js";
+import { DominoTileHTML } from "./components/DominoTile.js";
 import { computeScore } from "./engine/scoring.js";
+
+const SNAP_RADIUS = 56;
+// DominoTileHTML at size=44: two 44px pip grids + 2px divider
+const GHOST_TILE_W = 90;
+const GHOST_TILE_H = 44;
+
+// Spring constants (positions and velocities in px/frame at ~60fps)
+// Underdamped: spring stiffness=0.18, velocity retention=0.72 → ζ ≈ 0.75, slight overshoot on stops
+const SPRING_K = 0.18;
+const SPRING_DAMP = 0.72;
+// Rotation: tilt based on horizontal pointer velocity; springs back to upright
+const ROT_K = 0.12;
+const ROT_DAMP = 0.75;
+// Coast friction per frame (0.88^60 ≈ 0.05 → ~1s to near-stop)
+const COAST_FRICTION = 0.88;
+
+interface PhysState {
+  mode: "idle" | "drag" | "coast";
+  x: number; y: number;          // ghost top-left position (px)
+  vx: number; vy: number;        // spring / coast velocity (px/frame)
+  rot: number; rotVel: number;   // rotation (deg) and its velocity
+  targetX: number; targetY: number;  // where the spring pulls toward
+  ptrVx: number;                 // smoothed pointer horiz velocity (px/frame) — drives tilt
+  isSnapping: boolean;
+  coastStartT: number;           // performance.now() when coast began
+}
 
 export function App() {
   const { state, init, reset, place, discard, save, playSaved, playFromHand, reroll, getLegalPointIds } =
@@ -16,6 +44,34 @@ export function App() {
   const [dragSource, setDragSource] = useState<DragSource | null>(null);
   const [deck, setDeck] = useState<ResolvedDeck | null>(null);
   const [animationDone, setAnimationDone] = useState(false);
+
+  // Ghost tile — just visibility flags; position/rotation live in physRef and are DOM-applied by RAF
+  const [ghostVisible, setGhostVisible] = useState(false);
+  const [ghostDomino, setGhostDomino] = useState<RunState["pendingTile"]>(null);
+
+  // Snap
+  const [snapPointId, setSnapPointId] = useState<string | null>(null);
+
+  // Refs
+  const radialTreeRef = useRef<RadialTreeHandle>(null);
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const dragPointerIdRef = useRef<number | null>(null);
+  const pickupOffsetRef = useRef({ x: 0, y: 0 });
+  const physRef = useRef<PhysState>({
+    mode: "idle", x: 0, y: 0, vx: 0, vy: 0, rot: 0, rotVel: 0,
+    targetX: 0, targetY: 0, ptrVx: 0, isSnapping: false, coastStartT: 0,
+  });
+  const ptrLastRef = useRef({ x: 0, y: 0, t: 0 });
+
+  // Stable closure mirrors
+  const stateRef = useRef(state); stateRef.current = state;
+  const dragSourceRef = useRef(dragSource); dragSourceRef.current = dragSource;
+  const snapPointIdRef = useRef<string | null>(null); snapPointIdRef.current = snapPointId;
+  const legalPointIds = dragSource ? getLegalPointIds(dragSource) : new Set<string>();
+  const legalPointIdsRef = useRef(legalPointIds); legalPointIdsRef.current = legalPointIds;
+  const actionsRef = useRef({ place, playSaved, playFromHand });
+  actionsRef.current = { place, playSaved, playFromHand };
 
   useEffect(() => {
     setDeck(loadDeckBrowser("standard-double-six"));
@@ -38,39 +94,241 @@ export function App() {
   const isAnimating = runEnded && !animationDone;
   const showScoreScreen = runEnded && animationDone;
 
-  function handleDragStart(source: DragSource) {
+  // ── Physics RAF loop ──────────────────────────────────────────────────────────
+
+  function startRaf() {
+    if (rafRef.current !== null) return;
+
+    function frame() {
+      const ghost = ghostRef.current;
+      const p = physRef.current;
+
+      if (p.mode === "idle" || !ghost) {
+        rafRef.current = null;
+        return;
+      }
+
+      if (p.mode === "drag") {
+        // Underdamped spring toward target
+        const dx = p.targetX - p.x;
+        const dy = p.targetY - p.y;
+        p.vx = p.vx * SPRING_DAMP + dx * SPRING_K;
+        p.vy = p.vy * SPRING_DAMP + dy * SPRING_K;
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Tilt: straighten on snap, lean into horizontal motion otherwise
+        const targetRot = p.isSnapping ? 0 : Math.max(-14, Math.min(14, p.ptrVx * 4.5));
+        p.rotVel = p.rotVel * ROT_DAMP + (targetRot - p.rot) * ROT_K;
+        p.rot += p.rotVel;
+      } else {
+        // Coast: pure friction
+        p.vx *= COAST_FRICTION;
+        p.vy *= COAST_FRICTION;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rot *= 0.88;
+        p.rotVel *= 0.8;
+
+        const elapsed = performance.now() - p.coastStartT;
+        const FADE_START_MS = 120;
+        const FADE_DUR_MS = 280;
+        const fadeT = Math.max(0, (elapsed - FADE_START_MS) / FADE_DUR_MS);
+        const opacity = Math.max(0, 1 - fadeT);
+        ghost.style.opacity = `${opacity}`;
+
+        if (opacity <= 0 || Math.hypot(p.vx, p.vy) < 0.3) {
+          p.mode = "idle";
+          setGhostVisible(false);
+          setGhostDomino(null);
+          rafRef.current = null;
+          return;
+        }
+      }
+
+      ghost.style.left = `${p.x}px`;
+      ghost.style.top = `${p.y}px`;
+      ghost.style.transform = `scale(1.05) rotate(${p.rot}deg)`;
+
+      rafRef.current = requestAnimationFrame(frame);
+    }
+
+    rafRef.current = requestAnimationFrame(frame);
+  }
+
+  function stopRaf() {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }
+
+  // ── Drag start ────────────────────────────────────────────────────────────────
+
+  function handleDragStart(
+    source: DragSource,
+    e: React.PointerEvent,
+    offset: { x: number; y: number },
+  ) {
+    stopRaf();
+
+    let domino: RunState["pendingTile"] = null;
+    if (state) {
+      if (source.kind === "pending") domino = state.pendingTile ?? null;
+      else if (source.kind === "saved") domino = state.savedTiles.find((s) => s.id === source.savedTileId)?.domino ?? null;
+      else domino = (state.hand ?? []).find((t) => t.id === source.handTileId) ?? null;
+    }
+
+    const initX = e.clientX - offset.x;
+    const initY = e.clientY - offset.y;
+
+    physRef.current = {
+      mode: "drag",
+      x: initX, y: initY,
+      vx: 0, vy: 0,
+      rot: 0, rotVel: 0,
+      targetX: initX, targetY: initY,
+      ptrVx: 0,
+      isSnapping: false,
+      coastStartT: 0,
+    };
+    ptrLastRef.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+
+    dragPointerIdRef.current = e.pointerId;
+    pickupOffsetRef.current = offset;
     setDragSource(source);
+    setGhostDomino(domino);
+    setGhostVisible(true);
+    setSnapPointId(null);
+    startRaf();
   }
 
-  function handleDragEnd() {
-    setDragSource(null);
-  }
+  // ── Pointer event effect ──────────────────────────────────────────────────────
 
-  function handleRootDrop() {
-    if (!state || !dragSource) return;
-    if (dragSource.kind === "pending") {
-      place(null);
-    } else if (dragSource.kind === "hand") {
-      playFromHand(dragSource.handTileId, null);
+  useEffect(() => {
+    function clearDragState() {
+      stopRaf();
+      physRef.current.mode = "idle";
+      dragPointerIdRef.current = null;
+      setDragSource(null);
+      setGhostVisible(false);
+      setGhostDomino(null);
+      setSnapPointId(null);
     }
-    setDragSource(null);
-  }
 
-  function handleDropOnPoint(pointId: string) {
-    if (!state || !dragSource) return;
-    if (dragSource.kind === "pending") {
-      place(pointId);
-    } else if (dragSource.kind === "saved") {
-      playSaved(dragSource.savedTileId, pointId);
-    } else if (dragSource.kind === "hand") {
-      playFromHand(dragSource.handTileId, pointId);
+    function updateSnap(cx: number, cy: number) {
+      const src = dragSourceRef.current;
+      const st = stateRef.current;
+      if (!src || !st || !radialTreeRef.current) {
+        physRef.current.isSnapping = false;
+        setSnapPointId(null);
+        return;
+      }
+      const legal = legalPointIdsRef.current;
+      let bestId: string | null = null;
+      let bestDist = SNAP_RADIUS;
+      let bestSP: { x: number; y: number } | null = null;
+
+      if (Object.keys(st.placedNodes).length === 0 && (src.kind === "pending" || src.kind === "hand")) {
+        const sp = radialTreeRef.current.getScreenPos(0, 0);
+        if (sp) {
+          const d = Math.hypot(cx - sp.x, cy - sp.y);
+          if (d < bestDist) { bestDist = d; bestId = "root"; bestSP = sp; }
+        }
+      }
+      for (const pt of Object.values(st.openConnectionPoints)) {
+        if (!legal.has(pt.id)) continue;
+        const sp = radialTreeRef.current.getScreenPos(pt.position.x, pt.position.y);
+        if (!sp) continue;
+        const d = Math.hypot(cx - sp.x, cy - sp.y);
+        if (d < bestDist) { bestDist = d; bestId = pt.id; bestSP = sp; }
+      }
+
+      setSnapPointId(bestId);
+      physRef.current.isSnapping = bestId !== null;
+      if (bestSP) {
+        physRef.current.targetX = bestSP.x - GHOST_TILE_W / 2;
+        physRef.current.targetY = bestSP.y - GHOST_TILE_H / 2;
+      } else {
+        const { x: ox, y: oy } = pickupOffsetRef.current;
+        physRef.current.targetX = cx - ox;
+        physRef.current.targetY = cy - oy;
+      }
     }
-    setDragSource(null);
-  }
 
-  const legalPointIds = dragSource
-    ? getLegalPointIds(dragSource)
-    : new Set<string>();
+    function onPointerMove(e: PointerEvent) {
+      if (e.pointerId !== dragPointerIdRef.current || physRef.current.mode !== "drag") return;
+
+      // Update smoothed pointer velocity (px/frame, EMA) for rotation
+      const now = performance.now();
+      const dt = now - ptrLastRef.current.t;
+      if (dt > 0 && dt < 150) {
+        const pxPerFrame = (e.clientX - ptrLastRef.current.x) / dt * 16.67;
+        physRef.current.ptrVx = physRef.current.ptrVx * 0.65 + pxPerFrame * 0.35;
+      }
+      ptrLastRef.current = { x: e.clientX, y: e.clientY, t: now };
+
+      updateSnap(e.clientX, e.clientY);
+    }
+
+    function onPointerUp(e: PointerEvent) {
+      if (e.pointerId !== dragPointerIdRef.current) return;
+
+      const snapped = snapPointIdRef.current;
+      const src = dragSourceRef.current;
+      const acts = actionsRef.current;
+
+      if (snapped && src) {
+        // Dispatch placement, ghost disappears immediately
+        if (snapped === "root") {
+          if (src.kind === "pending") acts.place(null);
+          else if (src.kind === "hand") acts.playFromHand(src.handTileId, null);
+        } else {
+          if (src.kind === "pending") acts.place(snapped);
+          else if (src.kind === "saved") acts.playSaved(src.savedTileId, snapped);
+          else if (src.kind === "hand") acts.playFromHand(src.handTileId, snapped);
+        }
+        clearDragState();
+        return;
+      }
+
+      // No snap — hand off to coast (RAF keeps running)
+      dragPointerIdRef.current = null;
+      setDragSource(null);
+      setSnapPointId(null);
+
+      const p = physRef.current;
+      // Clamp coast initial velocity so fast throws still look clean
+      const MAX_COAST = 38; // px/frame
+      const spd = Math.hypot(p.vx, p.vy);
+      if (spd < 0.5) {
+        clearDragState();
+        return;
+      }
+      const scale = Math.min(1, MAX_COAST / spd);
+      p.vx *= scale;
+      p.vy *= scale;
+      p.mode = "coast";
+      p.coastStartT = performance.now();
+      p.isSnapping = false;
+      if (ghostRef.current) ghostRef.current.style.opacity = "1";
+      // RAF is already running — it'll pick up coast mode on the next frame
+    }
+
+    function onPointerCancel(e: PointerEvent) {
+      if (e.pointerId !== dragPointerIdRef.current) return;
+      clearDragState();
+    }
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+    };
+  }, []);
 
   // ── Start screen ─────────────────────────────────────────────────────────────
   if (!state) {
@@ -145,7 +403,6 @@ export function App() {
         fontFamily: "system-ui, sans-serif",
       }}
     >
-      {/* Score screen overlay — rendered after animation completes */}
       {showScoreScreen && (
         <ScoreScreen
           state={state}
@@ -154,14 +411,13 @@ export function App() {
         />
       )}
 
-      {/* Main area */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <RadialTree
+          ref={radialTreeRef}
           state={state}
           dragSource={dragSource}
           legalPointIds={legalPointIds}
-          onDropOnPoint={handleDropOnPoint}
-          onRootDrop={handleRootDrop}
+          snapPointId={snapPointId}
           animationOverlay={
             isAnimating
               ? <ScoringAnimation state={state} onDone={() => setAnimationDone(true)} />
@@ -174,9 +430,29 @@ export function App() {
           onSave={save}
           onReroll={reroll}
           onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
         />
       </div>
+
+      {/* Ghost tile — positioned and animated entirely by the RAF physics loop */}
+      {ghostVisible && ghostDomino && (
+        <div
+          ref={ghostRef}
+          style={{
+            position: "fixed",
+            left: physRef.current.x,
+            top: physRef.current.y,
+            transform: `scale(1.05) rotate(${physRef.current.rot}deg)`,
+            transformOrigin: `${pickupOffsetRef.current.x}px ${pickupOffsetRef.current.y}px`,
+            pointerEvents: "none",
+            zIndex: 1000,
+            filter: snapPointId
+              ? "drop-shadow(0 0 10px #4caf50) drop-shadow(0 3px 8px rgba(0,0,0,0.3))"
+              : "drop-shadow(0 6px 16px rgba(0,0,0,0.5))",
+          }}
+        >
+          <DominoTileHTML domino={ghostDomino} size={44} />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,17 +1,23 @@
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import type { ReactNode } from "react";
 import type { RunState, Direction } from "../engine/types.js";
 import type { DragSource } from "../hooks/useRunState.js";
 import { getTileTransform } from "../engine/tileTransform.js";
 import { DominoTileSVG } from "./DominoTile.js";
 
-const HALF_SIZE = 18; // halfSize passed to DominoTileSVG
-const TILE_W = HALF_SIZE * 4; // 72 — long axis
-const TILE_H = HALF_SIZE * 2; // 36 — short axis
+const HALF_SIZE = 18;
+const TILE_W = HALF_SIZE * 4; // 72
+const TILE_H = HALF_SIZE * 2; // 36
 const PADDING = 80;
 
-// Maps incomingDirection to the layoutAngle convention used by getTileTransform
-// (angle FROM center TO node; parent is at layoutAngle + π from the node).
+const SNAP_KEYFRAME = `
+  @keyframes ps-snap-pulse {
+    0%   { transform: scale(1);    }
+    40%  { transform: scale(1.25); }
+    100% { transform: scale(1);    }
+  }
+`;
+
 function dirToLayoutAngle(dir: Direction): number {
   switch (dir) {
     case "right": return 0;
@@ -21,23 +27,25 @@ function dirToLayoutAngle(dir: Direction): number {
   }
 }
 
+export interface RadialTreeHandle {
+  getScreenPos(svgX: number, svgY: number): { x: number; y: number } | null;
+}
+
 interface RadialTreeProps {
   state: RunState;
   dragSource: DragSource | null;
   legalPointIds: Set<string>;
-  onDropOnPoint: (pointId: string) => void;
-  onRootDrop: () => void;
+  snapPointId?: string | null;
   animationOverlay?: ReactNode;
 }
 
-export function RadialTree({
+export const RadialTree = forwardRef<RadialTreeHandle, RadialTreeProps>(function RadialTree({
   state,
   dragSource,
   legalPointIds,
-  onDropOnPoint,
-  onRootDrop,
+  snapPointId,
   animationOverlay,
-}: RadialTreeProps) {
+}, ref) {
   const nodes = Object.values(state.placedNodes);
   const points = Object.values(state.openConnectionPoints);
   const hasRoot = nodes.length > 0;
@@ -47,11 +55,27 @@ export function RadialTree({
   const [zoom, setZoom] = useState({ scale: 1, panX: 0, panY: 0 });
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
-  const panState = useRef({ active: false, startPx: { x: 0, y: 0 }, startPan: { x: 0, y: 0 } });
+  const panState = useRef<{
+    active: boolean;
+    pointerId: number | null;
+    startPx: { x: number; y: number };
+    startPan: { x: number; y: number };
+  }>({ active: false, pointerId: null, startPx: { x: 0, y: 0 }, startPan: { x: 0, y: 0 } });
   const targetZoomRef = useRef({ scale: 1, panX: 0, panY: 0 });
   const animFrameRef = useRef<number | null>(null);
 
-  // Compute viewBox bounding box from placed tiles and open points.
+  useImperativeHandle(ref, () => ({
+    getScreenPos(svgX, svgY) {
+      if (!svgRef.current) return null;
+      const ctm = svgRef.current.getScreenCTM();
+      if (!ctm) return null;
+      const pt = svgRef.current.createSVGPoint();
+      pt.x = svgX; pt.y = svgY;
+      const s = pt.matrixTransform(ctm);
+      return { x: s.x, y: s.y };
+    },
+  }), []);
+
   const { vbX, vbY, vbW, vbH } = useMemo(() => {
     let minX = -TILE_W / 2 - PADDING;
     let minY = -TILE_H / 2 - PADDING;
@@ -76,11 +100,9 @@ export function RadialTree({
     return { vbX: minX, vbY: minY, vbW: maxX - minX, vbH: maxY - minY };
   }, [state]);
 
-  // Mirror natural bounds into ref so stable window handlers can read fresh values.
   const vbRef = useRef({ vbX, vbY, vbW, vbH });
   vbRef.current = { vbX, vbY, vbW, vbH };
 
-  // Apply zoom/pan on top of the natural viewBox.
   const zoomedW = vbW / zoom.scale;
   const zoomedH = vbH / zoom.scale;
   const cx = vbX + vbW / 2 + zoom.panX;
@@ -88,8 +110,8 @@ export function RadialTree({
   const finalVb = `${cx - zoomedW / 2} ${cy - zoomedH / 2} ${zoomedW} ${zoomedH}`;
 
   useEffect(() => {
-    function onMouseMove(e: MouseEvent) {
-      if (!panState.current.active || !svgRef.current) return;
+    function onPointerMove(e: PointerEvent) {
+      if (!panState.current.active || e.pointerId !== panState.current.pointerId || !svgRef.current) return;
       const rect = svgRef.current.getBoundingClientRect();
       const { vbW: bw, vbH: bh } = vbRef.current;
       const { scale } = zoomRef.current;
@@ -97,14 +119,19 @@ export function RadialTree({
       const dy = ((e.clientY - panState.current.startPx.y) * (bh / scale)) / rect.height;
       setZoom({ scale, panX: panState.current.startPan.x - dx, panY: panState.current.startPan.y - dy });
     }
-    function onMouseUp() {
-      panState.current.active = false;
+    function onPointerUp(e: PointerEvent) {
+      if (e.pointerId === panState.current.pointerId) panState.current.active = false;
     }
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    function onPointerCancel(e: PointerEvent) {
+      if (e.pointerId === panState.current.pointerId) panState.current.active = false;
+    }
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
     return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
@@ -147,14 +174,18 @@ export function RadialTree({
     if (!animFrameRef.current) animFrameRef.current = requestAnimationFrame(animateToTarget);
   }
 
-  function handleMouseDown(e: React.MouseEvent<SVGSVGElement>) {
-    if (e.button !== 0 || dragSource !== null) return;
+  function handlePointerDown(e: React.PointerEvent<SVGSVGElement>) {
+    if (!e.isPrimary || dragSource !== null) return;
     panState.current = {
       active: true,
+      pointerId: e.pointerId,
       startPx: { x: e.clientX, y: e.clientY },
       startPan: { x: zoom.panX, y: zoom.panY },
     };
   }
+
+  const rootIsDropTarget = isDragging && (dragSource?.kind === "pending" || dragSource?.kind === "hand");
+  const rootSnapped = snapPointId === "root";
 
   return (
     <svg
@@ -163,15 +194,23 @@ export function RadialTree({
       height="100%"
       viewBox={finalVb}
       preserveAspectRatio="xMidYMid meet"
-      style={{ flex: 1, minWidth: 0, background: "#1e2a3a", borderRadius: 8, cursor: isDragging ? "default" : "grab" }}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        background: "#1e2a3a",
+        borderRadius: 8,
+        cursor: isDragging ? "default" : "grab",
+        touchAction: "none",
+      }}
       onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
+      onPointerDown={handlePointerDown}
       onDoubleClick={() => {
         targetZoomRef.current = { scale: 1, panX: 0, panY: 0 };
         if (!animFrameRef.current) animFrameRef.current = requestAnimationFrame(animateToTarget);
       }}
     >
       <defs>
+        <style>{SNAP_KEYFRAME}</style>
         <filter id="start-glow" x="-50%" y="-80%" width="200%" height="260%">
           <feGaussianBlur stdDeviation="9" />
         </filter>
@@ -194,25 +233,16 @@ export function RadialTree({
 
       {/* Root placeholder / drop zone */}
       {!hasRoot && (
-        <g
-          style={{ cursor: isDragging && (dragSource?.kind === "pending" || dragSource?.kind === "hand") ? "copy" : "default" }}
-          onDragOver={(e) => {
-            if (dragSource?.kind === "pending" || dragSource?.kind === "hand") e.preventDefault();
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (dragSource?.kind === "pending" || dragSource?.kind === "hand") onRootDrop();
-          }}
-        >
+        <g style={{ cursor: "default" }}>
           <rect
             x={-TILE_W / 2 - 6}
             y={-TILE_H / 2 - 6}
             width={TILE_W + 12}
             height={TILE_H + 12}
             rx={8}
-            fill={isDragging && (dragSource?.kind === "pending" || dragSource?.kind === "hand") ? "rgba(76,175,80,0.12)" : "none"}
-            stroke={isDragging && (dragSource?.kind === "pending" || dragSource?.kind === "hand") ? "#4caf50" : "#3a5070"}
-            strokeWidth={2}
+            fill={rootIsDropTarget ? (rootSnapped ? "rgba(76,175,80,0.25)" : "rgba(76,175,80,0.12)") : "none"}
+            stroke={rootIsDropTarget ? "#4caf50" : "#3a5070"}
+            strokeWidth={rootSnapped ? 3 : 2}
             strokeDasharray="6 3"
           />
           {!isDragging && (
@@ -220,9 +250,9 @@ export function RadialTree({
               drag tile here
             </text>
           )}
-          {isDragging && (dragSource?.kind === "pending" || dragSource?.kind === "hand") && (
+          {rootIsDropTarget && (
             <text x={0} y={5} textAnchor="middle" fontSize={10} fill="#4caf50">
-              drop to start
+              {rootSnapped ? "release to place" : "drop to start"}
             </text>
           )}
         </g>
@@ -236,16 +266,12 @@ export function RadialTree({
         if (node.incomingDirection === null) {
           angle = 0;
         } else if (isDbl) {
-          // Doubles are rendered perpendicular to the chain direction.
           angle =
             node.incomingDirection === "left" || node.incomingDirection === "right"
               ? Math.PI / 2
               : 0;
         } else {
-          const { rotation } = getTileTransform(
-            node,
-            dirToLayoutAngle(node.incomingDirection),
-          );
+          const { rotation } = getTileTransform(node, dirToLayoutAngle(node.incomingDirection));
           angle = rotation;
         }
 
@@ -264,41 +290,34 @@ export function RadialTree({
       {/* Animation overlay — same SVG coordinate space */}
       {animationOverlay}
 
-      {/* Open connection point drop targets — only visible when dragging from hand */}
-      {dragSource?.kind === "hand" && points.map((pt) => {
+      {/* Open connection point targets — shown for all drag sources */}
+      {isDragging && points.map((pt) => {
         const isLegal = legalPointIds.has(pt.id);
-        const fill = !isDragging
-          ? "#1a2e42"
+        const isSnapped = snapPointId === pt.id;
+        const fill = isSnapped
+          ? "rgba(76,175,80,0.35)"
           : isLegal
             ? "rgba(76,175,80,0.2)"
             : "rgba(239,83,80,0.1)";
-        const stroke = !isDragging
-          ? "#3a5070"
-          : isLegal
-            ? "#4caf50"
-            : "#ef5350";
-        const opacity = isDragging && !isLegal ? 0.35 : 1;
+        const stroke = isLegal ? "#4caf50" : "#ef5350";
+        const r = isSnapped ? 22 : 16;
+        const opacity = !isLegal ? 0.35 : 1;
 
         return (
-          <g
-            key={pt.id}
-            style={{ cursor: isDragging && isLegal ? "copy" : "default" }}
-            onDragOver={(e) => {
-              if (isLegal) e.preventDefault();
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (isLegal) onDropOnPoint(pt.id);
-            }}
-          >
+          <g key={pt.id}>
             <circle
               cx={pt.position.x}
               cy={pt.position.y}
-              r={16}
+              r={r}
               fill={fill}
               stroke={stroke}
-              strokeWidth={2}
+              strokeWidth={isSnapped ? 3 : 2}
               opacity={opacity}
+              style={{
+                transformBox: "fill-box" as React.CSSProperties["transformBox"],
+                transformOrigin: "center",
+                animation: isSnapped ? "ps-snap-pulse 0.45s ease-in-out infinite" : undefined,
+              }}
             />
             <text
               x={pt.position.x}
@@ -306,7 +325,7 @@ export function RadialTree({
               textAnchor="middle"
               fontSize={13}
               fontWeight="600"
-              fill={isDragging && isLegal ? "#4caf50" : "#5a7898"}
+              fill={isLegal ? "#4caf50" : "#5a7898"}
               pointerEvents="none"
             >
               {pt.pipValue}
@@ -316,4 +335,4 @@ export function RadialTree({
       })}
     </svg>
   );
-}
+});

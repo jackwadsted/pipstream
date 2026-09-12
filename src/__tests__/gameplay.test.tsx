@@ -25,17 +25,11 @@ function makeDeck(...tiles: Domino[]): ResolvedDeck {
   return { id: "test", name: "Test", tiles: tiles.map((d) => ({ domino: d, quantity: 1 })) };
 }
 
-/** Minimal harness: renders HUD + RadialTree driven by useRunState, with test-id wiring for drag events. */
+/** Minimal harness: renders HUD + RadialTree driven by useRunState. */
 function GameHarness({ deck }: { deck: ResolvedDeck }) {
   const { state, init, place, discard, save, playSaved, getLegalPointIds } = useRunState(null);
   const [dragSource, setDragSource] = useState<DragSource | null>(null);
 
-  // Auto-init on mount
-  if (!state) {
-    // Trigger init synchronously via ref trick — simplest approach for tests
-  }
-
-  // Expose init for test setup
   return (
     <div>
       <button data-testid="init-btn" onClick={() => init(deck)}>Init</button>
@@ -45,23 +39,13 @@ function GameHarness({ deck }: { deck: ResolvedDeck }) {
             state={state}
             dragSource={dragSource}
             legalPointIds={dragSource ? getLegalPointIds(dragSource) : new Set()}
-            onRootDrop={() => { place(null); setDragSource(null); }}
-            onDropOnPoint={(ptId) => {
-              if (!dragSource) return;
-              if (dragSource.kind === "pending") {
-                place(ptId);
-              } else {
-                playSaved(dragSource.savedTileId, ptId);
-              }
-              setDragSource(null);
-            }}
           />
           <HUD
             state={state}
             onDiscard={discard}
             onSave={save}
-            onDragStart={(src) => setDragSource(src)}
-            onDragEnd={() => setDragSource(null)}
+            onReroll={() => {}}
+            onDragStart={(src, e) => setDragSource(src)}
           />
         </>
       )}
@@ -88,7 +72,7 @@ describe("HUD — discard button", () => {
     };
     const noop = () => {};
     render(
-      <HUD state={state} onDiscard={noop} onSave={noop} onDragStart={noop} onDragEnd={noop} />,
+      <HUD state={state} onDiscard={noop} onSave={noop} onReroll={noop} onDragStart={noop as never} />,
     );
     expect(screen.getByTestId("btn-discard")).not.toBeDisabled();
   });
@@ -109,7 +93,7 @@ describe("HUD — discard button", () => {
     };
     const noop = () => {};
     render(
-      <HUD state={state} onDiscard={noop} onSave={noop} onDragStart={noop} onDragEnd={noop} />,
+      <HUD state={state} onDiscard={noop} onSave={noop} onReroll={noop} onDragStart={noop as never} />,
     );
     expect(screen.getByTestId("btn-discard")).toBeDisabled();
   });
@@ -130,7 +114,7 @@ describe("HUD — discard button", () => {
     };
     const onDiscard = vi.fn();
     render(
-      <HUD state={state} onDiscard={onDiscard} onSave={() => {}} onDragStart={() => {}} onDragEnd={() => {}} />,
+      <HUD state={state} onDiscard={onDiscard} onSave={() => {}} onReroll={() => {}} onDragStart={() => {}} />,
     );
     fireEvent.click(screen.getByTestId("btn-discard"));
     expect(onDiscard).toHaveBeenCalledOnce();
@@ -154,7 +138,7 @@ describe("HUD — save button", () => {
     };
     const noop = () => {};
     render(
-      <HUD state={state} onDiscard={noop} onSave={noop} onDragStart={noop} onDragEnd={noop} />,
+      <HUD state={state} onDiscard={noop} onSave={noop} onReroll={noop} onDragStart={noop as never} />,
     );
     expect(screen.getByTestId("btn-save")).not.toBeDisabled();
   });
@@ -178,7 +162,7 @@ describe("HUD — save button", () => {
     };
     const noop = () => {};
     render(
-      <HUD state={state} onDiscard={noop} onSave={noop} onDragStart={noop} onDragEnd={noop} />,
+      <HUD state={state} onDiscard={noop} onSave={noop} onReroll={noop} onDragStart={noop as never} />,
     );
     expect(screen.getByTestId("btn-save")).toBeDisabled();
   });
@@ -216,8 +200,6 @@ describe("useRunState — place action", () => {
 
     place();
     expect(Object.keys(result()!.placedNodes)).toHaveLength(1);
-    // After root placement, the next tile from the draw pile is now pending
-    // (different from the tile that was placed)
     const [placedNode] = Object.values(result()!.placedNodes);
     expect(placedNode!.domino.id).toBe(pendingBefore);
     expect(result()!.pendingTile?.id).not.toBe(pendingBefore);
@@ -275,40 +257,23 @@ describe("useRunState — save action", () => {
 
 describe("drag-to-place: legal and illegal drops", () => {
   it("dropping on a legal connection point places the tile and updates the tree", () => {
-    // Build a known state: root d2-3 placed, pending tile d1-2 (matches pip-2)
     const deck = makeDeck(tile(2, 3), tile(1, 2));
-    const { result, clickInit, clickPlaceRoot, dragAndDrop } = (() => {
+    const { result, clickInit, clickPlaceRoot } = (() => {
       let latestState: RunState | null = null;
-      let latestLegal: Set<string> = new Set();
-      let latestDragSrc: DragSource | null = null;
 
       function Probe() {
         const hook = useRunState(null);
-        const [dragSource, setDragSource] = useState<DragSource | null>(null);
         latestState = hook.state;
-        latestDragSrc = dragSource;
-        if (hook.state && dragSource) {
-          latestLegal = hook.getLegalPointIds(dragSource);
-        }
 
         return (
           <div>
             <button data-testid="init" onClick={() => hook.init(deck)}>init</button>
             <button data-testid="place-root" onClick={() => hook.place(null)}>root</button>
-            <button
-              data-testid="start-drag-pending"
-              onClick={() => setDragSource({ kind: "pending" })}
-            >start drag</button>
             {hook.state && (
               <RadialTree
                 state={hook.state}
-                dragSource={dragSource}
-                legalPointIds={dragSource ? hook.getLegalPointIds(dragSource) : new Set()}
-                onRootDrop={() => { hook.place(null); setDragSource(null); }}
-                onDropOnPoint={(ptId) => {
-                  if (dragSource?.kind === "pending") hook.place(ptId);
-                  setDragSource(null);
-                }}
+                dragSource={null}
+                legalPointIds={new Set()}
               />
             )}
           </div>
@@ -320,33 +285,19 @@ describe("drag-to-place: legal and illegal drops", () => {
         result: () => latestState,
         clickInit: () => fireEvent.click(rendered.getByTestId("init")),
         clickPlaceRoot: () => fireEvent.click(rendered.getByTestId("place-root")),
-        dragAndDrop: (ptId: string) => {
-          // Simulate: start drag, then drop on the point SVG circle
-          fireEvent.click(rendered.getByTestId("start-drag-pending"));
-          // The connection point is rendered as a <g> with onDrop
-          const pts = rendered.container.querySelectorAll("[data-testid='cp-" + ptId + "']");
-          if (pts.length > 0) {
-            fireEvent.dragOver(pts[0]!);
-            fireEvent.drop(pts[0]!);
-          }
-        },
       };
     })();
 
     clickInit();
     clickPlaceRoot();
 
-    // After root d2-3, open points are pip-2 and pip-3.
-    // Pending tile is d1-2 which matches pip-2 only.
     const s = result()!;
     expect(Object.keys(s.placedNodes)).toHaveLength(1);
 
-    // Find the pip-2 point
     const pip2point = Object.values(s.openConnectionPoints).find((p) => p.pipValue === 2);
     expect(pip2point).toBeDefined();
 
-    // Trigger a drop on that point directly via the engine (the SVG circles don't carry data-testid yet)
-    // Let's test via the useRunState hook dispatch path instead
+    // Test placement via the engine hook directly
     let placed: RunState | null = null;
     function PlaceProbe() {
       const hook = useRunState(null);
@@ -374,7 +325,6 @@ describe("drag-to-place: legal and illegal drops", () => {
     fireEvent.click(r2.getByTestId("place-on-pip2"));
 
     expect(Object.keys(placed!.placedNodes)).toHaveLength(2);
-    // pip-2 should be consumed; open points should be pip-1 and pip-3
     const openVals = Object.values(placed!.openConnectionPoints)
       .map((p) => p.pipValue)
       .sort((a, b) => a - b);
@@ -382,7 +332,6 @@ describe("drag-to-place: legal and illegal drops", () => {
   });
 
   it("placing on an invalid (pip-mismatch) connection point is a no-op", () => {
-    // Root d2-3, pending d4-5. Trying to place on pip-2 should be rejected.
     const deck = makeDeck(tile(2, 3), tile(4, 5));
     let latestState: RunState | null = null;
 
@@ -411,7 +360,6 @@ describe("drag-to-place: legal and illegal drops", () => {
     fireEvent.click(rendered.getByTestId("root"));
     const before = latestState!;
     fireEvent.click(rendered.getByTestId("place-bad"));
-    // State must be unchanged (PlacementError caught in reducer)
     expect(latestState).toBe(before);
     expect(Object.keys(latestState!.placedNodes)).toHaveLength(1);
   });

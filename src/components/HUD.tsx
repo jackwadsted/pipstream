@@ -7,11 +7,10 @@ interface HUDProps {
   onDiscard: () => void;
   onSave: () => void;
   onReroll: () => void;
-  onDragStart: (source: DragSource) => void;
-  onDragEnd: () => void;
+  onDragStart: (source: DragSource, e: React.PointerEvent<HTMLDivElement>, offset: { x: number; y: number }) => void;
 }
 
-export function HUD({ state, onDiscard, onSave, onReroll, onDragStart, onDragEnd }: HUDProps) {
+export function HUD({ state, onDiscard, onSave, onReroll, onDragStart }: HUDProps) {
   const { config, pendingTile, savedTiles, drawPile, discardsUsed, savesUsed, status, doubleTriggerLog } = state;
 
   const isDrawFive = state.mode === "draw-five";
@@ -57,7 +56,6 @@ export function HUD({ state, onDiscard, onSave, onReroll, onDragStart, onDragEnd
           state={state}
           onReroll={onReroll}
           onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
         />
       ) : (
         <SaveDiscardPanel
@@ -71,7 +69,6 @@ export function HUD({ state, onDiscard, onSave, onReroll, onDragStart, onDragEnd
           onDiscard={onDiscard}
           onSave={onSave}
           onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
         />
       )}
     </div>
@@ -82,12 +79,10 @@ function DrawFivePanel({
   state,
   onReroll,
   onDragStart,
-  onDragEnd,
 }: {
   state: RunState;
   onReroll: () => void;
-  onDragStart: (source: DragSource) => void;
-  onDragEnd: () => void;
+  onDragStart: (source: DragSource, e: React.PointerEvent<HTMLDivElement>, offset: { x: number; y: number }) => void;
 }) {
   const hand = state.hand ?? [];
   const rerollsUsed = state.rerollsUsed ?? 0;
@@ -147,9 +142,13 @@ function DrawFivePanel({
                 <DominoTileHTML
                   domino={t}
                   size={44}
-                  draggable={state.status === "in-progress"}
-                  onDragStart={() => onDragStart({ kind: "hand", handTileId: t.id })}
-                  onDragEnd={onDragEnd}
+                  {...(state.status === "in-progress" ? {
+                    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+                      e.preventDefault();
+                      const r = e.currentTarget.getBoundingClientRect();
+                      onDragStart({ kind: "hand", handTileId: t.id }, e, { x: e.clientX - r.left, y: e.clientY - r.top });
+                    },
+                  } : {})}
                 />
               </div>
             ))}
@@ -174,7 +173,6 @@ function SaveDiscardPanel({
   onDiscard,
   onSave,
   onDragStart,
-  onDragEnd,
 }: {
   state: RunState;
   config: RunState["config"];
@@ -185,8 +183,7 @@ function SaveDiscardPanel({
   status: RunState["status"];
   onDiscard: () => void;
   onSave: () => void;
-  onDragStart: (source: DragSource) => void;
-  onDragEnd: () => void;
+  onDragStart: (source: DragSource, e: React.PointerEvent<HTMLDivElement>, offset: { x: number; y: number }) => void;
 }) {
   const discardDisabled = discardsUsed >= config.maxDiscards || !pendingTile || status !== "in-progress";
   const saveDisabled = savesUsed >= config.maxSaves || !pendingTile || status !== "in-progress";
@@ -202,9 +199,13 @@ function SaveDiscardPanel({
             <DominoTileHTML
               domino={pendingTile}
               size={44}
-              draggable={status === "in-progress"}
-              onDragStart={() => onDragStart({ kind: "pending" })}
-              onDragEnd={onDragEnd}
+              {...(status === "in-progress" ? {
+                onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  onDragStart({ kind: "pending" }, e, { x: e.clientX - r.left, y: e.clientY - r.top });
+                },
+              } : {})}
             />
           </div>
         ) : (
@@ -248,9 +249,13 @@ function SaveDiscardPanel({
                 <DominoTileHTML
                   domino={st.domino}
                   size={38}
-                  draggable={status === "in-progress"}
-                  onDragStart={() => onDragStart({ kind: "saved", savedTileId: st.id })}
-                  onDragEnd={onDragEnd}
+                  {...(status === "in-progress" ? {
+                    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+                      e.preventDefault();
+                      const r = e.currentTarget.getBoundingClientRect();
+                      onDragStart({ kind: "saved", savedTileId: st.id }, e, { x: e.clientX - r.left, y: e.clientY - r.top });
+                    },
+                  } : {})}
                 />
               </div>
             ))}

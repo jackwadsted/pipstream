@@ -155,7 +155,7 @@ function VisitedOverlay({ node }: { node: PlacedNode }) {
   const hw = node.orientation === "horizontal" ? TILE_W / 2 : TILE_H / 2;
   const hh = node.orientation === "horizontal" ? TILE_H / 2 : TILE_W / 2;
   return (
-    <g transform={`rotate(${deg}, ${node.position.x}, ${node.position.y})`}>
+    <g pointerEvents="none" transform={`rotate(${deg}, ${node.position.x}, ${node.position.y})`}>
       <rect
         x={node.position.x - hw}
         y={node.position.y - hh}
@@ -179,7 +179,7 @@ function ActiveGlow({ node }: { node: PlacedNode }) {
   const hh = node.orientation === "horizontal" ? TILE_H / 2 : TILE_W / 2;
   const pad = 6;
   return (
-    <g transform={`rotate(${deg}, ${node.position.x}, ${node.position.y})`}>
+    <g pointerEvents="none" transform={`rotate(${deg}, ${node.position.x}, ${node.position.y})`}>
       <rect
         x={node.position.x - hw - pad}
         y={node.position.y - hh - pad}

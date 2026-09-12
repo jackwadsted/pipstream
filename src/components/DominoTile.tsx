@@ -117,26 +117,19 @@ function PipGridHTML({ value, size }: PipGridHTMLProps) {
 interface DominoTileHTMLProps {
   domino: Domino;
   size?: number;
-  /** If true, add draggable props */
-  draggable?: boolean;
-  onDragStart?: React.DragEventHandler<HTMLDivElement>;
-  onDragEnd?: React.DragEventHandler<HTMLDivElement>;
+  onPointerDown?: React.PointerEventHandler<HTMLDivElement>;
   style?: React.CSSProperties;
 }
 
 export function DominoTileHTML({
   domino,
   size = 52,
-  draggable,
-  onDragStart,
-  onDragEnd,
+  onPointerDown,
   style,
 }: DominoTileHTMLProps) {
   return (
     <div
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      onPointerDown={onPointerDown}
       data-testid={`domino-${domino.id}`}
       style={{
         display: "inline-flex",
@@ -144,8 +137,9 @@ export function DominoTileHTML({
         background: "#f8f8ff",
         border: "2px solid #333",
         borderRadius: 6,
-        cursor: draggable ? "grab" : "default",
+        cursor: onPointerDown ? "grab" : "default",
         userSelect: "none",
+        touchAction: onPointerDown ? "none" : undefined,
         ...style,
       }}
     >
