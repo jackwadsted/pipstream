@@ -334,6 +334,16 @@ export function App() {
 
   // ── Start screen ─────────────────────────────────────────────────────────────
   if (!state) {
+    const howToSteps = [
+      "Draw a hand of 5 tiles from the deck.",
+      "Play any tiles you want by placing them, matching pips and extending your structure from the starting point.",
+      "Redraw if you want — unused tiles go to the back of the deck and you get a fresh hand (up to 3 redraws).",
+      "After your 3rd redraw, any unused tiles in your hand are discarded.",
+      "Watch for doubles! They open two new branch points.",
+      "Keep going until you run out of legal moves or the deck runs out.",
+      "Score — at run's end, pips are tallied along every path from the starting point; branches split and multiply your totals for a final score.",
+    ];
+
     return (
       <div
         style={{
@@ -341,7 +351,9 @@ export function App() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          height: "100vh",
+          minHeight: "100vh",
+          overflowY: "auto",
+          paddingBlock: 40,
           fontFamily: "system-ui, sans-serif",
           background: "#1a1a2e",
           color: "#fff",
@@ -381,19 +393,49 @@ export function App() {
             </p>
             <div style={{ display: "flex", gap: 12 }}>
               <ModeButton
-                onClick={() => handleStartRun("save-discard")}
-                title="Save / Discard"
-                description="Draw tiles one by one. Save or discard to manage your hand."
-              />
-              <ModeButton
                 onClick={() => handleStartRun("draw-five")}
                 title="Draw Five"
                 description="Draw 5 at once. Re-roll your hand up to 3 times for free."
                 highlight
               />
+              <ModeButton
+                onClick={() => handleStartRun("save-discard")}
+                title="Save / Discard"
+                description="Draw tiles one by one. Save or discard to manage your hand."
+              />
             </div>
           </div>
         )}
+        <div style={{ maxWidth: 520, width: "100%", padding: "0 16px", marginTop: 8 }}>
+          <p style={{ color: "#888", margin: "0 0 12px", fontSize: 13, letterSpacing: "0.03em", textTransform: "uppercase" }}>
+            How to Play
+          </p>
+          <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+            {howToSteps.map((text, i) => (
+              <li key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <span
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: "50%",
+                    background: "#4f8ef7",
+                    color: "#fff",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    marginTop: 1,
+                  }}
+                >
+                  {i + 1}
+                </span>
+                <span style={{ fontSize: 14, color: "#ccc", lineHeight: 1.5 }}>{text}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     );
   }
