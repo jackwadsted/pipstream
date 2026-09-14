@@ -19,7 +19,7 @@ export function loadLevelsBrowser(): LevelData[] {
   for (const [, mod] of Object.entries(levelModules)) {
     levels.push((mod as { default: LevelData }).default);
   }
-  return levels.sort((a, b) => a.seed - b.seed);
+  return levels.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
 }
 
 function loadDominoesBrowser(): Domino[] {

@@ -787,7 +787,7 @@ function ModeButton({
     <button
       onClick={onClick}
       style={{
-        width: 180,
+        flex: 1,
         padding: "16px 12px",
         background: highlight ? "#4f8ef7" : "#2a2a3e",
         color: "#fff",
