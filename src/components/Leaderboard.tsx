@@ -51,7 +51,11 @@ export function Leaderboard({ entries, highlightScore, onPlayAgain, onClose }: L
                     <td style={{ ...tdStyle, textAlign: "right", fontWeight: 700, color: "#1a1a2e" }}>
                       {entry.score}
                     </td>
-                    <td style={{ ...tdStyle, color: "#666" }}>{modeLabel[entry.mode] ?? entry.mode}</td>
+                    <td style={{ ...tdStyle, color: "#666" }}>
+                      {entry.levelName
+                        ? `Level ${entry.levelName} (${modeLabel[entry.mode] ?? entry.mode})`
+                        : (modeLabel[entry.mode] ?? entry.mode)}
+                    </td>
                     <td style={{ ...tdStyle, color: "#aaa" }}>
                       {new Date(entry.date).toLocaleDateString()}
                     </td>

@@ -3,6 +3,7 @@ import type { RunState } from "../engine/types.js";
 import type { ScoreResult } from "../engine/scoring.js";
 import type { LeaderboardEntry } from "../lib/leaderboard.js";
 import { Leaderboard } from "./Leaderboard.js";
+import { computeStars } from "../lib/completedLevels.js";
 
 interface ScoreScreenProps {
   state: RunState;
@@ -10,9 +11,10 @@ interface ScoreScreenProps {
   onPlayAgain: () => void;
   onMainMenu: () => void;
   onSaveScore: (name: string) => LeaderboardEntry[];
+  nearOptimal?: number;
 }
 
-export function ScoreScreen({ state, scoreResult, onPlayAgain, onMainMenu, onSaveScore }: ScoreScreenProps) {
+export function ScoreScreen({ state, scoreResult, onPlayAgain, onMainMenu, onSaveScore, nearOptimal }: ScoreScreenProps) {
   const [phase, setPhase] = useState<"entry" | "board">("entry");
   const [playerName, setPlayerName] = useState("");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
@@ -22,6 +24,8 @@ export function ScoreScreen({ state, scoreResult, onPlayAgain, onMainMenu, onSav
     state.status === "ended-deck-exhausted"
       ? "Deck exhausted — full chain scored."
       : "No moves remaining.";
+
+  const levelStars = nearOptimal !== undefined ? computeStars(scoreResult.totalScore, nearOptimal) : null;
 
   function handleSave() {
     const name = playerName.trim() || "Anonymous";
@@ -59,6 +63,47 @@ export function ScoreScreen({ state, scoreResult, onPlayAgain, onMainMenu, onSav
           <>
             <h2 style={{ margin: "0 0 4px", fontSize: 26, color: "#1a1a2e" }}>{title}</h2>
             <p style={{ margin: "0 0 24px", color: "#666", fontSize: 14 }}>{subtitle}</p>
+
+            {/* Level result — score vs target + stars */}
+            {nearOptimal !== undefined && levelStars !== null && (
+              <div
+                style={{
+                  background: "#fafafa",
+                  border: "1.5px solid #e8e8e8",
+                  borderRadius: 10,
+                  padding: "16px 20px",
+                  marginBottom: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 16,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#aaa", marginBottom: 4 }}>
+                    Level Score
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <span style={{ fontSize: 32, fontWeight: 800, color: "#1a1a2e", lineHeight: 1 }}>
+                      {scoreResult.totalScore}
+                    </span>
+                    <span style={{ fontSize: 16, color: "#aaa", fontWeight: 400 }}>
+                      / {nearOptimal}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#aaa" }}>
+                    Stars
+                  </div>
+                  <div style={{ fontSize: 28, letterSpacing: 2, lineHeight: 1 }}>
+                    {[1, 2, 3].map((n) => (
+                      <span key={n} style={{ color: n <= levelStars ? "#f5a623" : "#ddd" }}>★</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Total score */}
             <div

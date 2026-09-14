@@ -11,7 +11,7 @@ import { ScoreScreen } from "./components/ScoreScreen.js";
 import { ScoringAnimation } from "./components/ScoringAnimation.js";
 import { Leaderboard } from "./components/Leaderboard.js";
 import { getLeaderboard, addEntry } from "./lib/leaderboard.js";
-import { getAllLevelStars, saveLevelStars, computeStars, starThreshold } from "./lib/completedLevels.js";
+import { getAllLevelStars, saveLevelStars, computeStars, starThreshold, saveLevelScore, getAllLevelScores } from "./lib/completedLevels.js";
 import { DominoTileHTML } from "./components/DominoTile.js";
 import { computeScore } from "./engine/scoring.js";
 import { useFullscreen } from "./hooks/useFullscreen.js";
@@ -52,6 +52,7 @@ export function App() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [levels, setLevels] = useState<LevelData[]>([]);
   const [levelStars, setLevelStars] = useState<Record<string, number>>({});
+  const [levelScores, setLevelScores] = useState<Record<string, number>>({});
   const [currentLevelId, setCurrentLevelId] = useState<string | null>(null);
   const [currentNearOptimal, setCurrentNearOptimal] = useState<number | null>(null);
   const [seedInput, setSeedInput] = useState("");
@@ -88,6 +89,7 @@ export function App() {
     setDeck(loadDeckBrowser("standard-double-six"));
     setLevels(loadLevelsBrowser());
     setLevelStars(getAllLevelStars());
+    setLevelScores(getAllLevelScores());
   }, []);
 
   function handleStartRun(mode: GameMode) {
@@ -127,6 +129,8 @@ export function App() {
 
   useEffect(() => {
     if (runEnded && currentLevelId && scoreResult && currentNearOptimal !== null) {
+      saveLevelScore(currentLevelId, scoreResult.totalScore);
+      setLevelScores(getAllLevelScores());
       const stars = computeStars(scoreResult.totalScore, currentNearOptimal);
       if (stars > 0) {
         saveLevelStars(currentLevelId, stars);
@@ -431,13 +435,15 @@ export function App() {
               }}>
                 {levels.map((level) => {
                   const stars = levelStars[level.id] ?? 0;
+                  const bestScore = levelScores[level.id];
+                  const played = bestScore !== undefined;
                   return (
                     <button
                       key={level.id}
                       onClick={() => handleStartLevel(level)}
                       style={{
-                        background: stars > 0 ? "#1e2e1e" : "#2a2a3e",
-                        border: stars > 0 ? "1px solid #3a6b3a" : "1px solid #3a3a5c",
+                        background: stars > 0 ? "#1e2e1e" : played ? "#2a2430" : "#2a2a3e",
+                        border: stars > 0 ? "1px solid #3a6b3a" : played ? "1px solid #5c3a5c" : "1px solid #3a3a5c",
                         borderRadius: 10,
                         padding: "12px 8px",
                         color: "#fff",
@@ -458,7 +464,9 @@ export function App() {
                         {level.name}
                       </span>
                       <span style={{ fontSize: 10, color: "#888", lineHeight: 1.4, textAlign: "center" }}>
-                        {starThreshold(level.targets.nearOptimal, 3).toLocaleString()}
+                        {stars === 0 && played
+                          ? `Best: ${bestScore.toLocaleString()}`
+                          : starThreshold(level.targets.nearOptimal, 3).toLocaleString()}
                       </span>
                     </button>
                   );
@@ -638,14 +646,18 @@ export function App() {
           scoreResult={scoreResult!}
           onPlayAgain={reset}
           onMainMenu={reset}
-          onSaveScore={(name) =>
-            addEntry({
+          nearOptimal={currentNearOptimal ?? undefined}
+          onSaveScore={(name) => {
+            const currentLevel = currentLevelId ? levels.find((l) => l.id === currentLevelId) : undefined;
+            return addEntry({
               name,
               score: scoreResult!.totalScore,
               mode: state.mode ?? "save-discard",
               date: new Date().toISOString(),
-            })
-          }
+              levelId: currentLevel?.id,
+              levelName: currentLevel?.name,
+            });
+          }}
         />
       )}
 

@@ -1,4 +1,5 @@
 const KEY = "pipstream_level_stars";
+const SCORES_KEY = "pipstream_level_scores";
 
 // Star thresholds as fractions of the nearOptimal ceiling.
 const STAR_THRESHOLDS = [0.6, 0.8, 1.0] as const;
@@ -30,6 +31,31 @@ export function saveLevelStars(levelId: string, stars: number): void {
   } catch {
     // ignore quota errors
   }
+}
+
+function loadScores(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(SCORES_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+export function saveLevelScore(levelId: string, score: number): void {
+  const existing = loadScores();
+  if ((existing[levelId] ?? -1) >= score) return;
+  existing[levelId] = score;
+  try {
+    localStorage.setItem(SCORES_KEY, JSON.stringify(existing));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+export function getAllLevelScores(): Record<string, number> {
+  return loadScores();
 }
 
 export function computeStars(score: number, nearOptimal: number): number {

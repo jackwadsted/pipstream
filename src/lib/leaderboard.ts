@@ -5,6 +5,8 @@ export interface LeaderboardEntry {
   score: number;
   mode: GameMode;
   date: string; // ISO 8601
+  levelId?: string;
+  levelName?: string;
 }
 
 const KEY = "pipstream_leaderboard";
