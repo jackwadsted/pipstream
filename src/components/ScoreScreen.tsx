@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { RunState } from "../engine/types.js";
 import type { ScoreResult } from "../engine/scoring.js";
 import type { LeaderboardEntry } from "../lib/leaderboard.js";
@@ -12,12 +12,22 @@ interface ScoreScreenProps {
   onMainMenu: () => void;
   onSaveScore: (name: string) => LeaderboardEntry[];
   nearOptimal?: number;
+  freeSeed?: number;
 }
 
-export function ScoreScreen({ state, scoreResult, onPlayAgain, onMainMenu, onSaveScore, nearOptimal }: ScoreScreenProps) {
+export function ScoreScreen({ state, scoreResult, onPlayAgain, onMainMenu, onSaveScore, nearOptimal, freeSeed }: ScoreScreenProps) {
   const [phase, setPhase] = useState<"entry" | "board">("entry");
   const [playerName, setPlayerName] = useState("");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopySeed = useCallback(() => {
+    if (freeSeed === undefined) return;
+    navigator.clipboard.writeText(String(freeSeed)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [freeSeed]);
 
   const title = state.status === "ended-deck-exhausted" ? "Run Complete!" : "Run Over";
   const subtitle =
@@ -131,6 +141,50 @@ export function ScoreScreen({ state, scoreResult, onPlayAgain, onMainMenu, onSav
               <Stat label="Doubles played" value={state.doubleTriggerLog.length} />
               <Stat label="Tiles placed" value={Object.keys(state.placedNodes).length} />
             </div>
+
+            {/* Free play seed */}
+            {freeSeed !== undefined && nearOptimal === undefined && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  background: "#f9f9f9",
+                  border: "1px solid #e8e8e8",
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  marginBottom: 20,
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#aaa" }}>
+                    Seed
+                  </span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: "#1a1a2e", fontVariantNumeric: "tabular-nums" }}>
+                    {freeSeed}
+                  </span>
+                </div>
+                <button
+                  onClick={handleCopySeed}
+                  style={{
+                    padding: "5px 12px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: copied ? "#e6f4ea" : "#f0f4ff",
+                    color: copied ? "#2e7d32" : "#1a1a2e",
+                    border: "1px solid " + (copied ? "#a5d6a7" : "#d0d8f0"),
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    transition: "background 0.15s, color 0.15s",
+                    letterSpacing: "0.02em",
+                    flexShrink: 0,
+                  }}
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            )}
 
             {/* Per-path breakdown */}
             {scoreResult.paths.length > 0 && (

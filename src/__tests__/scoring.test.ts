@@ -102,9 +102,9 @@ describe("computeScore — straight chain, no doubles", () => {
 // ─── single double ────────────────────────────────────────────────────────────
 
 describe("computeScore — single double", () => {
-  it("double root with two children: both paths get branchMultiplier once", () => {
+  it("double root with two children: multiplier stays 1 — first tile cannot branch", () => {
     // root(3-3)[double] → C(3-5), D(3-4)
-    // branchMultiplier = 2
+    // branchMultiplier = 2, but root double is excluded from multiplying
     const root = node("r", tile(3, 3), null, null);
     const C = node("C", tile(3, 5), "r", "a");
     const D = node("D", tile(3, 4), "r", "a");
@@ -112,10 +112,10 @@ describe("computeScore — single double", () => {
 
     expect(result.paths).toHaveLength(2);
     for (const p of result.paths) {
-      expect(p.multiplier).toBe(2);
+      expect(p.multiplier).toBe(1);
     }
-    // root(6)+C(8)=14 ×2=28; root(6)+D(7)=13 ×2=26; total=54
-    expect(result.totalScore).toBe(54);
+    // root(6)+C(8)=14 ×1=14; root(6)+D(7)=13 ×1=13; total=27
+    expect(result.totalScore).toBe(27);
   });
 
   it("double mid-chain: two leaf paths each carry branchMultiplier", () => {

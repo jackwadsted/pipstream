@@ -1,9 +1,9 @@
 {
-  "id": "level-00029",
+  "id": "level-00012",
   "name": "10",
   "deckRef": "standard-double-six",
-  "seed": 29,
+  "seed": 12,
   "targets": {
-    "nearOptimal": 5124
+    "nearOptimal": 1018
   }
 }

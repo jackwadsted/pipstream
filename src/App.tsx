@@ -55,6 +55,7 @@ export function App() {
   const [levelScores, setLevelScores] = useState<Record<string, number>>({});
   const [currentLevelId, setCurrentLevelId] = useState<string | null>(null);
   const [currentNearOptimal, setCurrentNearOptimal] = useState<number | null>(null);
+  const [currentSeed, setCurrentSeed] = useState<number | null>(null);
   const [seedInput, setSeedInput] = useState("");
 
   // Ghost tile — just visibility flags; position/rotation live in physRef and are DOM-applied by RAF
@@ -96,6 +97,7 @@ export function App() {
     if (!deck) return;
     setCurrentLevelId(null);
     setCurrentNearOptimal(null);
+    setCurrentSeed(null);
     init(deck, mode);
   }
 
@@ -103,6 +105,7 @@ export function App() {
     if (!deck) return;
     setCurrentLevelId(level.id);
     setCurrentNearOptimal(level.targets.nearOptimal);
+    setCurrentSeed(null);
     init(deck, "draw-five", level.seed);
   }
 
@@ -111,6 +114,7 @@ export function App() {
     if (!deck || isNaN(seed) || seed < 1) return;
     setCurrentLevelId(null);
     setCurrentNearOptimal(null);
+    setCurrentSeed(seed);
     init(deck, "draw-five", seed);
   }
 
@@ -647,6 +651,7 @@ export function App() {
           onPlayAgain={reset}
           onMainMenu={reset}
           nearOptimal={currentNearOptimal ?? undefined}
+          freeSeed={currentSeed ?? undefined}
           onSaveScore={(name) => {
             const currentLevel = currentLevelId ? levels.find((l) => l.id === currentLevelId) : undefined;
             return addEntry({

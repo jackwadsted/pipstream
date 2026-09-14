@@ -73,11 +73,11 @@ function solveSeed(
 
 // ─── output ──────────────────────────────────────────────────────────────────
 
-function levelJson(deckId: string, r: SolveResult): string {
+function levelJson(deckId: string, r: SolveResult, name: string): string {
   return JSON.stringify(
     {
       id: `level-${String(r.seed).padStart(5, "0")}`,
-      name: "Untitled Level",
+      name,
       deckRef: deckId,
       seed: r.seed,
       targets: { nearOptimal: r.nearOptimal },
@@ -87,10 +87,10 @@ function levelJson(deckId: string, r: SolveResult): string {
   ) + "\n";
 }
 
-function writeLevel(dir: string, deckId: string, r: SolveResult): string {
+function writeLevel(dir: string, deckId: string, r: SolveResult, name: string): string {
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, `level-${String(r.seed).padStart(5, "0")}.json`);
-  fs.writeFileSync(outPath, levelJson(deckId, r));
+  fs.writeFileSync(outPath, levelJson(deckId, r, name));
   return outPath;
 }
 
@@ -138,16 +138,16 @@ if (args.find !== null) {
   printTable(found);
 
   if (args.outputDir) {
-    for (const r of found) writeLevel(args.outputDir, args.deckId, r);
+    found.forEach((r, i) => writeLevel(args.outputDir!, args.deckId, r, String(i + 1)));
     process.stderr.write(`\n${found.length} levels written to ${args.outputDir}\n`);
   }
 } else if (args.count === 1) {
   process.stderr.write(`Solving seed ${args.startSeed}...\n`);
   const result = solveSeed(deck, args.startSeed);
-  process.stdout.write(levelJson(args.deckId, result));
+  process.stdout.write(levelJson(args.deckId, result, "1"));
 
   if (args.outputDir) {
-    const outPath = writeLevel(args.outputDir, args.deckId, result);
+    const outPath = writeLevel(args.outputDir, args.deckId, result, "1");
     process.stderr.write(`Written to ${outPath}\n`);
   }
 } else {
@@ -163,7 +163,7 @@ if (args.find !== null) {
   printTable(results);
 
   if (args.outputDir) {
-    for (const r of results) writeLevel(args.outputDir, args.deckId, r);
+    results.forEach((r, i) => writeLevel(args.outputDir!, args.deckId, r, String(i + 1)));
     process.stderr.write(`\n${results.length} levels written to ${args.outputDir}\n`);
   }
 }

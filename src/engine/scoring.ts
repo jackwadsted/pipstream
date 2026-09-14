@@ -62,7 +62,8 @@ export function computeScore(state: RunState, config: GameConfig): ScoreResult {
     }
 
     const isDouble = node.domino.pips[0] === node.domino.pips[1];
-    const childMult = isDouble ? currentMult * branchMultiplier : currentMult;
+    const isRoot = node.parentNodeId === null;
+    const childMult = isDouble && !isRoot ? currentMult * branchMultiplier : currentMult;
 
     for (const childId of children) {
       traverse(childId, path, childMult);
