@@ -1,6 +1,8 @@
+import { useRef, useState, useEffect } from "react";
 import type { RunState } from "../engine/types.js";
 import type { DragSource } from "../hooks/useRunState.js";
 import { DominoTileHTML } from "./DominoTile.js";
+import { sound } from "../lib/sound.js";
 
 interface HUDProps {
   state: RunState;
@@ -77,6 +79,8 @@ export function HUD({ state, dragSource, onDiscard, onSave, onReroll, onDragStar
   );
 }
 
+const TILE_ENTER_CSS = `@keyframes ps-tile-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`;
+
 function DrawFivePanel({
   state,
   dragSource,
@@ -90,6 +94,22 @@ function DrawFivePanel({
 }) {
   const hand = state.hand ?? [];
   const rerollsUsed = state.rerollsUsed ?? 0;
+
+  // Track newly arrived tiles for staggered draw animation + sound
+  const prevHandIdsRef = useRef<Set<string>>(new Set());
+  const [arrivalIdx, setArrivalIdx] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    const prev = prevHandIdsRef.current;
+    const added = hand.filter((t) => !prev.has(t.id));
+    if (added.length > 0) {
+      const next = new Map<string, number>();
+      added.forEach((t, i) => next.set(t.id, i));
+      setArrivalIdx(next);
+      added.forEach((_, i) => setTimeout(() => sound.tileDraw(), i * 300));
+    }
+    prevHandIdsRef.current = new Set(hand.map((t) => t.id));
+  }, [hand]);
   const freeRerolls = state.config.freeRerolls ?? 3;
   const freeRemaining = Math.max(0, freeRerolls - rerollsUsed);
   const canReroll = hand.length > 0 || state.drawPile.length > 0;
@@ -136,6 +156,7 @@ function DrawFivePanel({
 
       {/* Hand tiles */}
       <div>
+        <style>{TILE_ENTER_CSS}</style>
         <Label>Hand ({hand.length})</Label>
         {hand.length === 0 ? (
           <EmptyText>—</EmptyText>
@@ -143,8 +164,15 @@ function DrawFivePanel({
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
             {hand.map((t) => {
               const isDragging = dragSource?.kind === "hand" && dragSource.handTileId === t.id;
+              const ai = arrivalIdx.get(t.id);
               return (
-                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div
+                  key={t.id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    ...(ai !== undefined && { animation: "ps-tile-enter 0.2s ease-out both", animationDelay: `${ai * 0.3}s` }),
+                  }}
+                >
                   {isDragging ? (
                     <div style={{
                       width: 90,
@@ -205,6 +233,11 @@ function SaveDiscardPanel({
   const discardDisabled = discardsUsed >= config.maxDiscards || !pendingTile || status !== "in-progress";
   const saveDisabled = savesUsed >= config.maxSaves || !pendingTile || status !== "in-progress";
   const noRoot = Object.keys(state.placedNodes).length === 0;
+
+  useEffect(() => {
+    if (pendingTile) sound.tileDraw();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingTile?.id]);
 
   return (
     <>

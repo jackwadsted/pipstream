@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import type { RunState, PlacedNode } from "../engine/types.js";
 import { getTileTransform } from "../engine/tileTransform.js";
+import { sound } from "../lib/sound.js";
 
 const TILE_W = 72;
 const TILE_H = 36;
@@ -356,6 +357,8 @@ export function ScoringAnimation({ state, onDone }: { state: RunState; onDone: (
   const m = moments[idx] ?? moments[moments.length - 1]!;
 
   useEffect(() => {
+    if (m.kind === "visit" && m.pipAdditions.length > 0) sound.scorePips();
+    else if (m.kind === "multiplier") sound.scoreMultiplier();
     const cb = m.kind === "done" ? () => onDoneRef.current() : () => setIdx((i) => i + 1);
     const t = setTimeout(cb, m.durationMs);
     return () => clearTimeout(t);

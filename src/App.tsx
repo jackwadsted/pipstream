@@ -15,6 +15,7 @@ import { getAllLevelStars, saveLevelStars, computeStars, starThreshold, saveLeve
 import { DominoTileHTML } from "./components/DominoTile.js";
 import { computeScore } from "./engine/scoring.js";
 import { useFullscreen } from "./hooks/useFullscreen.js";
+import { sound } from "./lib/sound.js";
 
 const SNAP_RADIUS = 56;
 // DominoTileHTML at size=44: two 44px pip grids + 2px divider
@@ -244,6 +245,7 @@ export function App() {
     };
     ptrLastRef.current = { x: e.clientX, y: e.clientY, t: performance.now() };
 
+    sound.tilePickup();
     dragPointerIdRef.current = e.pointerId;
     pickupOffsetRef.current = offset;
     setDragSource(source);
@@ -294,6 +296,7 @@ export function App() {
         if (d < bestDist) { bestDist = d; bestId = pt.id; bestSP = sp; }
       }
 
+      if (bestId !== null && snapPointIdRef.current === null) sound.tileSnap();
       setSnapPointId(bestId);
       physRef.current.isSnapping = bestId !== null;
       if (bestSP) {
@@ -330,6 +333,9 @@ export function App() {
 
       if (snapped && src) {
         // Dispatch placement, ghost disappears immediately
+        const isFirstTile = Object.keys(stateRef.current?.placedNodes ?? {}).length === 0;
+        if (isFirstTile) sound.tilePlaceFirst();
+        else sound.tilePlace();
         if (snapped === "root") {
           if (src.kind === "pending") acts.place(null);
           else if (src.kind === "hand") acts.playFromHand(src.handTileId, null);
