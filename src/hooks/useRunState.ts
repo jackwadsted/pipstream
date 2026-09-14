@@ -4,6 +4,7 @@ import type { GameMode, RunState } from "../engine/types.js";
 import { defaultConfig } from "../engine/types.js";
 import {
   startRun,
+  startRunSeeded,
   startRunDrawFive,
   startRunDrawFiveSeeded,
   placeTile,
@@ -35,7 +36,9 @@ function reducer(state: RunState | null, action: Action): RunState | null {
   if (action.type === "RESET") return null;
   if (action.type === "INIT") {
     if (action.seed !== undefined) {
-      return startRunDrawFiveSeeded(action.deck, defaultConfig, action.seed);
+      return action.mode === "draw-five"
+        ? startRunDrawFiveSeeded(action.deck, defaultConfig, action.seed)
+        : startRunSeeded(action.deck, defaultConfig, action.seed);
     }
     return action.mode === "draw-five"
       ? startRunDrawFive(action.deck, defaultConfig)

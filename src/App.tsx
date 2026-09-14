@@ -96,10 +96,11 @@ export function App() {
 
   function handleStartRun(mode: GameMode) {
     if (!deck) return;
+    const seed = Math.floor(Math.random() * 1_000_000) + 1;
     setCurrentLevelId(null);
     setCurrentNearOptimal(null);
-    setCurrentSeed(null);
-    init(deck, mode);
+    setCurrentSeed(seed);
+    init(deck, mode, seed);
   }
 
   function handleStartLevel(level: LevelData) {
@@ -142,7 +143,7 @@ export function App() {
         setLevelStars(getAllLevelStars());
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runEnded]);
 
   // ── Physics RAF loop ──────────────────────────────────────────────────────────
@@ -391,248 +392,248 @@ export function App() {
     const howToSteps = [
       "Draw a hand of 5 tiles from the deck.",
       "Play any tiles you want by placing them, matching pips and extending your structure from the starting point.",
-      "Redraw if you want — unused tiles go to the back of the deck and you get a fresh hand (up to 3 redraws).",
+      "Redraw if you want - unused tiles go to the back of the deck and you get a fresh hand (up to 3 redraws).",
       "After your 3rd redraw, any unused tiles in your hand are discarded.",
       "Watch for doubles! They open two new branch points.",
       "Keep going until you run out of legal moves or the deck runs out.",
-      "Score — at run's end, pips are tallied along every path from the starting point; branches split and multiply your totals for a final score.",
+      "Score - at run's end, pips are tallied along every path from the starting point; branches split and multiply your totals for a final score.",
     ];
 
     const seedIsValid = /^\d+$/.test(seedInput.trim()) && parseInt(seedInput.trim(), 10) >= 1;
 
     return (
       <>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          minHeight: "100vh",
-          overflowY: "auto",
-          paddingBlock: 40,
-          fontFamily: "system-ui, sans-serif",
-          background: "#1a1a2e",
-          color: "#fff",
-          gap: 32,
-        }}
-      >
-        {fullscreenSupported && (
-          <FullscreenBtn isFullscreen={isFullscreen} onToggle={toggleFullscreen} dark />
-        )}
-
-        {/* Header */}
-        <div style={{ textAlign: "center" }}>
-          <h1 style={{ fontSize: 40, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-            Pipstream
-          </h1>
-          <p style={{ color: "#aaa", margin: 0, fontSize: 15 }}>
-            Build the chain. Branch the doubles. Score big.
-          </p>
-        </div>
-
-        {!deck ? (
-          <p style={{ color: "#666", fontSize: 14 }}>Loading…</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28, width: "100%", maxWidth: 560, padding: "0 16px" }}>
-
-            {/* Levels section */}
-            <div style={{ width: "100%" }}>
-              <SectionLabel>Levels</SectionLabel>
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(5, 1fr)",
-                gap: 8,
-              }}>
-                {levels.map((level) => {
-                  const stars = levelStars[level.id] ?? 0;
-                  const bestScore = levelScores[level.id];
-                  const played = bestScore !== undefined;
-                  return (
-                    <button
-                      key={level.id}
-                      onClick={() => handleStartLevel(level)}
-                      style={{
-                        background: stars > 0 ? "#1e2e1e" : played ? "#2a2430" : "#2a2a3e",
-                        border: stars > 0 ? "1px solid #3a6b3a" : played ? "1px solid #5c3a5c" : "1px solid #3a3a5c",
-                        borderRadius: 10,
-                        padding: "12px 8px",
-                        color: "#fff",
-                        cursor: "pointer",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: 6,
-                        position: "relative",
-                      }}
-                    >
-                      <span style={{ fontSize: 11, lineHeight: 1, letterSpacing: 1 }}>
-                        {[1, 2, 3].map((n) => (
-                          <span key={n} style={{ color: n <= stars ? "#f5c542" : "#444" }}>★</span>
-                        ))}
-                      </span>
-                      <span style={{ fontSize: 18, fontWeight: 800, color: stars > 0 ? "#5cb85c" : "#fff" }}>
-                        {level.name}
-                      </span>
-                      <span style={{ fontSize: 10, color: "#888", lineHeight: 1.4, textAlign: "center" }}>
-                        {stars === 0 && played
-                          ? `Best: ${bestScore.toLocaleString()}`
-                          : starThreshold(level.targets.nearOptimal, 3).toLocaleString()}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Free play section */}
-            <div style={{ width: "100%" }}>
-              <SectionLabel>Free Play</SectionLabel>
-              <div style={{ display: "flex", gap: 12 }}>
-                <ModeButton
-                  onClick={() => handleStartRun("draw-five")}
-                  title="Draw Five"
-                  description="Draw 5 at once. Re-roll your hand up to 3 times for free."
-                  highlight
-                />
-                <ModeButton
-                  onClick={() => handleStartRun("save-discard")}
-                  title="Save / Discard"
-                  description="Draw tiles one by one. Save or discard to manage your hand."
-                />
-              </div>
-            </div>
-
-            {/* Custom seed section */}
-            <div style={{ width: "100%" }}>
-              <SectionLabel>Custom Seed</SectionLabel>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  type="number"
-                  min={1}
-                  value={seedInput}
-                  onChange={(e) => setSeedInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && seedIsValid && handleStartCustomSeed()}
-                  placeholder="Enter a seed number"
-                  style={{
-                    flex: 1,
-                    padding: "10px 14px",
-                    background: "#2a2a3e",
-                    border: "1px solid #3a3a5c",
-                    borderRadius: 8,
-                    color: "#fff",
-                    fontSize: 14,
-                    outline: "none",
-                  }}
-                />
-                <button
-                  onClick={handleStartCustomSeed}
-                  disabled={!seedIsValid}
-                  style={{
-                    padding: "10px 20px",
-                    background: seedIsValid ? "#4f8ef7" : "#2a2a3e",
-                    color: seedIsValid ? "#fff" : "#555",
-                    border: "none",
-                    borderRadius: 8,
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: seedIsValid ? "pointer" : "not-allowed",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Play
-                </button>
-              </div>
-              <p style={{ margin: "6px 0 0", fontSize: 11, color: "#555" }}>
-                Plays in Draw Five mode
-              </p>
-            </div>
-
-            {/* High scores */}
-            <button
-              onClick={() => setShowLeaderboard(true)}
-              style={{
-                padding: "8px 24px",
-                background: "transparent",
-                color: "#aaa",
-                border: "1px solid #444",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer",
-                letterSpacing: "0.02em",
-              }}
-            >
-              High Scores
-            </button>
-          </div>
-        )}
-
-        {/* How to play */}
-        <div style={{ maxWidth: 520, width: "100%", padding: "0 16px" }}>
-          <p style={{ color: "#888", margin: "0 0 12px", fontSize: 13, letterSpacing: "0.03em", textTransform: "uppercase" }}>
-            How to Play
-          </p>
-          <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-            {howToSteps.map((text, i) => (
-              <li key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                <span
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: "50%",
-                    background: "#4f8ef7",
-                    color: "#fff",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                    marginTop: 1,
-                  }}
-                >
-                  {i + 1}
-                </span>
-                <span style={{ fontSize: 14, color: "#ccc", lineHeight: 1.5 }}>{text}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
-
-      {/* Leaderboard overlay */}
-      {showLeaderboard && (
         <div
           style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.65)",
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
-            justifyContent: "center",
-            zIndex: 100,
+            minHeight: "100vh",
+            overflowY: "auto",
+            paddingBlock: 40,
             fontFamily: "system-ui, sans-serif",
+            background: "#1a1a2e",
+            color: "#fff",
+            gap: 32,
           }}
         >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              padding: "32px 40px",
-              maxWidth: 560,
-              width: "90%",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
-            }}
-          >
-            <Leaderboard
-              entries={getLeaderboard()}
-              onClose={() => setShowLeaderboard(false)}
-            />
+          {fullscreenSupported && (
+            <FullscreenBtn isFullscreen={isFullscreen} onToggle={toggleFullscreen} dark />
+          )}
+
+          {/* Header */}
+          <div style={{ textAlign: "center" }}>
+            <h1 style={{ fontSize: 40, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
+              Pipstream
+            </h1>
+            <p style={{ color: "#aaa", margin: 0, fontSize: 15 }}>
+              Build the chain. Branch the doubles. Score big.
+            </p>
+          </div>
+
+          {!deck ? (
+            <p style={{ color: "#666", fontSize: 14 }}>Loading…</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28, width: "100%", maxWidth: 560, padding: "0 16px" }}>
+
+              {/* Levels section */}
+              <div style={{ width: "100%" }}>
+                <SectionLabel>Levels</SectionLabel>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5, 1fr)",
+                  gap: 8,
+                }}>
+                  {levels.map((level) => {
+                    const stars = levelStars[level.id] ?? 0;
+                    const bestScore = levelScores[level.id];
+                    const played = bestScore !== undefined;
+                    return (
+                      <button
+                        key={level.id}
+                        onClick={() => handleStartLevel(level)}
+                        style={{
+                          background: stars > 0 ? "#1e2e1e" : played ? "#2a2430" : "#2a2a3e",
+                          border: stars > 0 ? "1px solid #3a6b3a" : played ? "1px solid #5c3a5c" : "1px solid #3a3a5c",
+                          borderRadius: 10,
+                          padding: "12px 8px",
+                          color: "#fff",
+                          cursor: "pointer",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 6,
+                          position: "relative",
+                        }}
+                      >
+                        <span style={{ fontSize: 11, lineHeight: 1, letterSpacing: 1 }}>
+                          {[1, 2, 3].map((n) => (
+                            <span key={n} style={{ color: n <= stars ? "#f5c542" : "#444" }}>★</span>
+                          ))}
+                        </span>
+                        <span style={{ fontSize: 18, fontWeight: 800, color: stars > 0 ? "#5cb85c" : "#fff" }}>
+                          {level.name}
+                        </span>
+                        <span style={{ fontSize: 10, color: "#888", lineHeight: 1.4, textAlign: "center" }}>
+                          {stars === 0 && played
+                            ? `Best: ${bestScore.toLocaleString()}`
+                            : starThreshold(level.targets.nearOptimal, 3).toLocaleString()}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Free play section */}
+              <div style={{ width: "100%" }}>
+                <SectionLabel>Free Play</SectionLabel>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <ModeButton
+                    onClick={() => handleStartRun("draw-five")}
+                    title="Draw Five"
+                    description="Draw 5 at once. Re-roll your hand up to 3 times for free."
+                    highlight
+                  />
+                  <ModeButton
+                    onClick={() => handleStartRun("save-discard")}
+                    title="Save / Discard"
+                    description="Draw tiles one by one. Save or discard to manage your hand."
+                  />
+                </div>
+              </div>
+
+              {/* Custom seed section */}
+              <div style={{ width: "100%" }}>
+                <SectionLabel>Custom Seed</SectionLabel>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="number"
+                    min={1}
+                    value={seedInput}
+                    onChange={(e) => setSeedInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && seedIsValid && handleStartCustomSeed()}
+                    placeholder="Enter a seed number"
+                    style={{
+                      flex: 1,
+                      padding: "10px 14px",
+                      background: "#2a2a3e",
+                      border: "1px solid #3a3a5c",
+                      borderRadius: 8,
+                      color: "#fff",
+                      fontSize: 14,
+                      outline: "none",
+                    }}
+                  />
+                  <button
+                    onClick={handleStartCustomSeed}
+                    disabled={!seedIsValid}
+                    style={{
+                      padding: "10px 20px",
+                      background: seedIsValid ? "#4f8ef7" : "#2a2a3e",
+                      color: seedIsValid ? "#fff" : "#555",
+                      border: "none",
+                      borderRadius: 8,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: seedIsValid ? "pointer" : "not-allowed",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Play
+                  </button>
+                </div>
+                <p style={{ margin: "6px 0 0", fontSize: 11, color: "#555" }}>
+                  Plays in Draw Five mode
+                </p>
+              </div>
+
+              {/* High scores */}
+              <button
+                onClick={() => setShowLeaderboard(true)}
+                style={{
+                  padding: "8px 24px",
+                  background: "transparent",
+                  color: "#aaa",
+                  border: "1px solid #444",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                High Scores
+              </button>
+            </div>
+          )}
+
+          {/* How to play */}
+          <div style={{ maxWidth: 520, width: "100%", padding: "0 16px" }}>
+            <p style={{ color: "#888", margin: "0 0 12px", fontSize: 13, letterSpacing: "0.03em", textTransform: "uppercase" }}>
+              How to Play
+            </p>
+            <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+              {howToSteps.map((text, i) => (
+                <li key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                  <span
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: "50%",
+                      background: "#4f8ef7",
+                      color: "#fff",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      marginTop: 1,
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span style={{ fontSize: 14, color: "#ccc", lineHeight: 1.5 }}>{text}</span>
+                </li>
+              ))}
+            </ol>
           </div>
         </div>
-      )}
+
+        {/* Leaderboard overlay */}
+        {showLeaderboard && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.65)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              fontFamily: "system-ui, sans-serif",
+            }}
+          >
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: 12,
+                padding: "32px 40px",
+                maxWidth: 560,
+                width: "90%",
+                maxHeight: "90vh",
+                overflowY: "auto",
+                boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
+              }}
+            >
+              <Leaderboard
+                entries={getLeaderboard()}
+                onClose={() => setShowLeaderboard(false)}
+              />
+            </div>
+          </div>
+        )}
       </>
     );
   }

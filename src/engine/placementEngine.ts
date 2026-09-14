@@ -103,6 +103,29 @@ export function startRunDrawFive(deck: ResolvedDeck, config: GameConfig): RunSta
   };
 }
 
+export function startRunSeeded(deck: ResolvedDeck, config: GameConfig, seed: number): RunState {
+  const allTiles = deck.tiles.flatMap(({ domino, quantity }) =>
+    Array.from({ length: quantity }, () => domino),
+  );
+  const [first, ...rest] = seededShuffle(allTiles, seed);
+  return {
+    config,
+    mode: "save-discard",
+    drawPile: rest,
+    discardPile: [],
+    savedTiles: [],
+    hand: [],
+    rerollsUsed: 0,
+    pendingTile: first ?? null,
+    placedNodes: {},
+    openConnectionPoints: {},
+    discardsUsed: 0,
+    savesUsed: 0,
+    status: "in-progress",
+    doubleTriggerLog: [],
+  };
+}
+
 export function startRunDrawFiveSeeded(deck: ResolvedDeck, config: GameConfig, seed: number): RunState {
   const allTiles = deck.tiles.flatMap(({ domino, quantity }) =>
     Array.from({ length: quantity }, () => domino),
