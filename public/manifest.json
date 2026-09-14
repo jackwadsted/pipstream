@@ -1,6 +1,6 @@
 {
-  "name": "Pipstream",
-  "short_name": "Pipstream",
+  "name": "pipstream",
+  "short_name": "pipstream",
   "description": "Build the chain. Branch the doubles. Score big.",
   "start_url": "/",
   "display": "standalone",

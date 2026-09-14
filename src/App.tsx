@@ -411,7 +411,7 @@ export function App() {
             minHeight: "100vh",
             overflowY: "auto",
             paddingBlock: 40,
-            fontFamily: "system-ui, sans-serif",
+            fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
             background: "#1a1a2e",
             color: "#fff",
             gap: 32,
@@ -423,8 +423,8 @@ export function App() {
 
           {/* Header */}
           <div style={{ textAlign: "center" }}>
-            <h1 style={{ fontSize: 40, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-              Pipstream
+            <h1 style={{ fontSize: 80, fontWeight: 700, margin: "0 0 6px", letterSpacing: "0.04em", fontFamily: "'Quantico', 'IBM Plex Sans', system-ui, sans-serif" }}>
+              pipstream
             </h1>
             <p style={{ color: "#aaa", margin: 0, fontSize: 15 }}>
               Build the chain. Branch the doubles. Score big.
@@ -612,7 +612,7 @@ export function App() {
               alignItems: "center",
               justifyContent: "center",
               zIndex: 100,
-              fontFamily: "system-ui, sans-serif",
+              fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
             }}
           >
             <div
@@ -645,7 +645,7 @@ export function App() {
         display: "flex",
         flexDirection: "column",
         height: "100vh",
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
       }}
     >
       {fullscreenSupported && (
