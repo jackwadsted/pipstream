@@ -1,5 +1,6 @@
 import type { Domino } from "../schemas/domino.js";
 import type { ResolvedDeck } from "../schemas/deck.js";
+import { seededShuffle } from "./seededShuffle.js";
 import type {
   ConnectionPoint,
   Direction,
@@ -81,6 +82,32 @@ export function startRunDrawFive(deck: ResolvedDeck, config: GameConfig): RunSta
     Array.from({ length: quantity }, () => domino),
   );
   const shuffled = shuffle(allTiles);
+  const handSize = config.handSize ?? 5;
+  const hand = shuffled.slice(0, handSize);
+  const rest = shuffled.slice(handSize);
+  return {
+    config,
+    mode: "draw-five",
+    drawPile: rest,
+    discardPile: [],
+    savedTiles: [],
+    hand,
+    rerollsUsed: 0,
+    pendingTile: null,
+    placedNodes: {},
+    openConnectionPoints: {},
+    discardsUsed: 0,
+    savesUsed: 0,
+    status: "in-progress",
+    doubleTriggerLog: [],
+  };
+}
+
+export function startRunDrawFiveSeeded(deck: ResolvedDeck, config: GameConfig, seed: number): RunState {
+  const allTiles = deck.tiles.flatMap(({ domino, quantity }) =>
+    Array.from({ length: quantity }, () => domino),
+  );
+  const shuffled = seededShuffle(allTiles, seed);
   const handSize = config.handSize ?? 5;
   const hand = shuffled.slice(0, handSize);
   const rest = shuffled.slice(handSize);

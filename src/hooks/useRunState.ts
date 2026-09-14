@@ -5,6 +5,7 @@ import { defaultConfig } from "../engine/types.js";
 import {
   startRun,
   startRunDrawFive,
+  startRunDrawFiveSeeded,
   placeTile,
   discardTile,
   saveTile,
@@ -21,7 +22,7 @@ export type DragSource =
   | { kind: "hand"; handTileId: string };
 
 type Action =
-  | { type: "INIT"; deck: ResolvedDeck; mode: GameMode }
+  | { type: "INIT"; deck: ResolvedDeck; mode: GameMode; seed?: number }
   | { type: "PLACE"; connectionPointId: string | null }
   | { type: "DISCARD" }
   | { type: "SAVE" }
@@ -33,6 +34,9 @@ type Action =
 function reducer(state: RunState | null, action: Action): RunState | null {
   if (action.type === "RESET") return null;
   if (action.type === "INIT") {
+    if (action.seed !== undefined) {
+      return startRunDrawFiveSeeded(action.deck, defaultConfig, action.seed);
+    }
     return action.mode === "draw-five"
       ? startRunDrawFive(action.deck, defaultConfig)
       : startRun(action.deck, defaultConfig);
@@ -66,8 +70,12 @@ function reducer(state: RunState | null, action: Action): RunState | null {
 export function useRunState(deck: ResolvedDeck | null) {
   const [state, dispatch] = useReducer(reducer, null);
 
-  function init(d: ResolvedDeck, mode: GameMode = "save-discard") {
-    dispatch({ type: "INIT", deck: d, mode });
+  function init(d: ResolvedDeck, mode: GameMode = "save-discard", seed?: number) {
+    if (seed !== undefined) {
+      dispatch({ type: "INIT", deck: d, mode, seed });
+    } else {
+      dispatch({ type: "INIT", deck: d, mode });
+    }
   }
 
   function reset() {

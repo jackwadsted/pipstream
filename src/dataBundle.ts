@@ -4,6 +4,23 @@ import { DeckSchema, type ResolvedDeck } from "./schemas/deck.js";
 
 const dominoModules = import.meta.glob("../data/dominoes/*.json", { eager: true });
 const deckModules = import.meta.glob("../data/decks/*.json", { eager: true });
+const levelModules = import.meta.glob("../data/decks/levels/*.json", { eager: true });
+
+export interface LevelData {
+  id: string;
+  name: string;
+  deckRef: string;
+  seed: number;
+  targets: { nearOptimal: number };
+}
+
+export function loadLevelsBrowser(): LevelData[] {
+  const levels: LevelData[] = [];
+  for (const [, mod] of Object.entries(levelModules)) {
+    levels.push((mod as { default: LevelData }).default);
+  }
+  return levels.sort((a, b) => a.seed - b.seed);
+}
 
 function loadDominoesBrowser(): Domino[] {
   const dominoes: Domino[] = [];

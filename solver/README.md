@@ -12,31 +12,24 @@ npm run solve -- [flags]
 
 | Flag | Default | Description |
 |---|---|---|
-| `--seed N` | `1` | Starting seed for the shuffled deck |
-| `--count N` | `1` | Solve exactly N consecutive seeds starting from `--seed` |
-| `--find N` | — | Iterate seeds until N pass the active filters (use instead of `--count` when curating levels) |
-| `--max-multiplier X` | — | Skip seeds where `optimal / par > X` |
-| `--min-optimal N` | — | Skip seeds where optimal score < N |
-| `--par-rerolls N` | `0` | Free rerolls given to the par solver (0 = no rerolls; 3 = same as player) |
-| `--beam N` | `200` | Beam width — higher finds better solutions but is slower |
+| `--seed N` | `1` | Starting seed |
+| `--count N` | `1` | Solve N consecutive seeds starting from `--seed` |
+| `--find N` | — | Iterate seeds until N pass all filters (use when curating levels) |
+| `--min-score N` | — | Skip seeds where `nearOptimal` < N |
+| `--min-human-ratio X` | `0.5` | Skip seeds where the human-equivalent score is less than X× the ceiling (filters out unlucky draws a real player can't recover from) |
 | `--deck ID` | `standard-double-six` | Deck to load from `data/decks/{ID}.json` |
 | `--output-dir PATH` | — | Write a level JSON file per result to this directory |
 
 ## Typical workflows
 
-**Scan a range to see the distribution:**
+**Find 10 curated levels and write them straight to the levels directory:**
+```bash
+npm run solve -- --find 10 --min-score 500 --output-dir data/decks/levels
+```
+
+**Scan a range to see score distribution before picking filters:**
 ```bash
 npm run solve -- --count 50
-```
-
-**Find 10 curated levels:**
-```bash
-npm run solve -- --find 10 --max-multiplier 12 --min-optimal 500
-```
-
-**Write them straight to the levels directory:**
-```bash
-npm run solve -- --find 10 --max-multiplier 12 --min-optimal 500 --output-dir data/decks/levels
 ```
 
 **Inspect a single seed:**
@@ -44,10 +37,46 @@ npm run solve -- --find 10 --max-multiplier 12 --min-optimal 500 --output-dir da
 npm run solve -- --seed 24
 ```
 
-**Check what happens when par gets the same reroll budget as the player (should always equal optimal):**
+**Raise the human-reachability bar (only levels where a human can get 70%+ of the ceiling):**
 ```bash
-npm run solve -- --count 10 --par-rerolls 3
+npm run solve -- --find 10 --min-score 500 --min-human-ratio 0.7 --output-dir data/decks/levels
 ```
+
+## How it works
+
+### The beam search
+
+Beam search is a heuristic tree search that balances exploration with practicality. At each step it keeps only the N best game states seen so far (the "beam"), expands each one by trying every legal move, scores the results, and keeps the top N again. It repeats until all states are finished.
+
+**What beam width represents:** a wider beam = a stronger player. A beam of 1 is pure greedy — it always picks whichever single move looks best right now, with no fallback if that path turns out poorly. A beam of 200 explores a much richer set of paths in parallel, recovering from locally-suboptimal moves that turn out to be globally good.
+
+A human player's effective beam width is roughly 3–4: they can hold a few candidate plans in mind and pick the most promising, but they can't exhaustively evaluate hundreds of continuations.
+
+Beam search is not guaranteed to find the global optimum — it's a heuristic. But at width 200 it converges reliably on near-optimal play for 28-tile runs. **Importantly, it is not monotonic in beam width:** a narrower beam can occasionally stumble onto a better path than a wider one because the two searches take different branches early on and never converge. The solver accounts for this by taking the best score found by either the human or the optimal run.
+
+### Two runs per seed
+
+Each seed is solved twice:
+
+1. **Human run** (beam = 3): simulates a typical player who uses their 3 free rerolls and makes decent move choices, but doesn't look far ahead. This score is used only as a reachability filter — it's not stored in the level file.
+
+2. **Optimal run** (beam = 200): finds the best score a near-optimal player can achieve. This becomes the level's `nearOptimal` target. The stored ceiling is `max(human score, optimal score)` so it always reflects the best-known achievable result.
+
+### Level selection filter
+
+Seeds are rejected if the human score is less than `--min-human-ratio` × `nearOptimal` (default 50%). This filters out seeds where the draw order is so unlucky that a human player gets stuck regardless of skill. The remaining seeds are the ones where good play is both rewarded and reachable.
+
+### Stars
+
+Stars are awarded in-game at fixed fractions of the `nearOptimal` ceiling:
+
+| Stars | Threshold |
+|---|---|
+| ★☆☆ | 60% of nearOptimal |
+| ★★☆ | 80% of nearOptimal |
+| ★★★ | 100% of nearOptimal |
+
+These thresholds are constants in `src/lib/completedLevels.ts` and can be tuned after playtesting.
 
 ## Level file format
 
@@ -60,8 +89,7 @@ Output files land at `data/decks/levels/level-NNNNN.json`:
   "deckRef": "standard-double-six",
   "seed": 24,
   "targets": {
-    "par": 3604,
-    "optimal": 4354
+    "nearOptimal": 4354
   }
 }
 ```
@@ -74,19 +102,11 @@ Output files land at `data/decks/levels/level-NNNNN.json`:
 
 The draw order is derived from the seed via Fisher-Yates shuffle using the mulberry32 PRNG. **This algorithm is permanently locked in** — changing it would invalidate every existing seed. The seed is compact (one integer), human-shareable, and deterministic across platforms.
 
-### par vs optimal
+### Why not more beam runs for difficulty tiers?
 
-- **par** — beam search with 0 free rerolls (`--par-rerolls 0`). Represents the score a player achieves by making optimal placement choices but never rerolling their hand. Many seeds produce stuck hands under this constraint, so par can be very low.
-- **optimal** — beam search with 3 free rerolls (same budget as the player). This is the ceiling a fully optimal player could reach.
+An earlier design ran the solver at three beam widths (3, 6, 10) to produce easy/hard/nearOptimal targets. This was abandoned because:
 
-When `--par-rerolls 3` is passed, par equals optimal on every seed — confirmed empirically. The gap between par(0) and optimal is entirely the value of the reroll budget.
+- Beam search is non-monotonic in width: beam=3 regularly outscores beam=6 or beam=10 on specific seeds, so the ordering is not reliable.
+- The tiers don't have a natural game-design meaning. The ceiling does: it's the best known score for this seed, full stop.
 
-### Beam search
-
-The solver uses beam search (width 200 by default) over the draw-five game state, calling the same `playFromHand`, `rerollHand`, and `computeScore` functions as the live game. It is not guaranteed to find the global optimum — it's a heuristic — but at width 200 it converges well for 28-tile runs. Increase `--beam` if you want higher-confidence scores at the cost of speed.
-
-### Filter guidelines (from initial experiments)
-
-- `--max-multiplier 12` is a reasonable ceiling for playable levels. Seeds above ×12 tend to have draw orders that deal unplayable hands without rerolls, making par too low to be a meaningful target.
-- `--min-optimal 500` filters out low-stakes seeds where the puzzle ends quickly regardless of play quality.
-- Roughly 1-in-6 seeds in the range 1–100 pass both filters simultaneously.
+The current design is cleaner — one number defines the ceiling, and stars are awarded at fractions of it. The human-run filter handles reachability separately.
