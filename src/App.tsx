@@ -423,7 +423,7 @@ export function App() {
 
           {/* Header */}
           <div style={{ textAlign: "center" }}>
-            <h1 style={{ fontSize: 80, fontWeight: 700, margin: "0 0 6px", letterSpacing: "0.04em", fontFamily: "'Quantico', 'IBM Plex Sans', system-ui, sans-serif" }}>
+            <h1 style={{ fontSize: 60, fontWeight: 700, margin: "0 0 6px", letterSpacing: "0.04em", fontFamily: "'Quantico', 'IBM Plex Sans', system-ui, sans-serif" }}>
               pipstream
             </h1>
             <p style={{ color: "#aaa", margin: 0, fontSize: 15 }}>
