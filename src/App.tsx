@@ -87,6 +87,23 @@ export function App() {
   const actionsRef = useRef({ place, playSaved, playFromHand });
   actionsRef.current = { place, playSaved, playFromHand };
 
+  // Compute the orientation rotation (deg) the ghost tile should show when snapped.
+  const snapRotDeg = useMemo(() => {
+    if (!snapPointId || snapPointId === "root" || !ghostDomino || !state) return 0;
+    const pt = state.openConnectionPoints[snapPointId];
+    if (!pt) return 0;
+    const isDouble = ghostDomino.pips[0] === ghostDomino.pips[1];
+    const { direction, pipValue } = pt;
+    if (isDouble) {
+      return direction === "left" || direction === "right" ? 90 : 0;
+    }
+    const layoutAngles: Record<string, number> = { right: 0, left: Math.PI, down: Math.PI / 2, up: -Math.PI / 2 };
+    const layoutAngle = layoutAngles[direction] ?? 0;
+    const connectedEnd = ghostDomino.pips[0] === pipValue ? "a" : "b";
+    const rotation = connectedEnd === "b" ? layoutAngle + Math.PI : layoutAngle;
+    return (rotation * 180) / Math.PI;
+  }, [snapPointId, ghostDomino, state]);
+
   useEffect(() => {
     setDeck(loadDeckBrowser("standard-double-six"));
     setLevels(loadLevelsBrowser());
@@ -713,7 +730,13 @@ export function App() {
               : "drop-shadow(0 6px 16px rgba(0,0,0,0.5))",
           }}
         >
-          <DominoTileHTML domino={ghostDomino} size={44} />
+          <div style={{
+            transform: `rotate(${snapRotDeg}deg)`,
+            transformOrigin: "center",
+            transition: "transform 0.18s ease",
+          }}>
+            <DominoTileHTML domino={ghostDomino} size={44} />
+          </div>
         </div>
       )}
     </div>

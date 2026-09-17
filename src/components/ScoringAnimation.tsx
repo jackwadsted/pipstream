@@ -159,15 +159,13 @@ function getNodeAngle(node: PlacedNode): number {
 
 function VisitedOverlay({ node }: { node: PlacedNode }) {
   const deg = (getNodeAngle(node) * 180) / Math.PI;
-  const hw = node.orientation === "horizontal" ? TILE_W / 2 : TILE_H / 2;
-  const hh = node.orientation === "horizontal" ? TILE_H / 2 : TILE_W / 2;
   return (
     <g pointerEvents="none" transform={`rotate(${deg}, ${node.position.x}, ${node.position.y})`}>
       <rect
-        x={node.position.x - hw}
-        y={node.position.y - hh}
-        width={hw * 2}
-        height={hh * 2}
+        x={node.position.x - TILE_W / 2}
+        y={node.position.y - TILE_H / 2}
+        width={TILE_W}
+        height={TILE_H}
         rx={3.6}
         fill="rgba(0,0,0,0.52)"
         style={{
@@ -182,16 +180,14 @@ function VisitedOverlay({ node }: { node: PlacedNode }) {
 
 function ActiveGlow({ node }: { node: PlacedNode }) {
   const deg = (getNodeAngle(node) * 180) / Math.PI;
-  const hw = node.orientation === "horizontal" ? TILE_W / 2 : TILE_H / 2;
-  const hh = node.orientation === "horizontal" ? TILE_H / 2 : TILE_W / 2;
   const pad = 6;
   return (
     <g pointerEvents="none" transform={`rotate(${deg}, ${node.position.x}, ${node.position.y})`}>
       <rect
-        x={node.position.x - hw - pad}
-        y={node.position.y - hh - pad}
-        width={(hw + pad) * 2}
-        height={(hh + pad) * 2}
+        x={node.position.x - TILE_W / 2 - pad}
+        y={node.position.y - TILE_H / 2 - pad}
+        width={TILE_W + pad * 2}
+        height={TILE_H + pad * 2}
         rx={8}
         fill="rgba(255,215,0,0.15)"
         stroke="#ffd700"

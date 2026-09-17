@@ -12,7 +12,9 @@ Draw from a double-six set one tile at a time. Place, discard, or save each tile
 pipstream/
 ├── data/
 │   ├── dominoes/              # One JSON file per domino tile (28 files)
-│   └── decks/                 # One JSON file per deck definition
+│   └── decks/
+│       ├── standard-double-six.json
+│       └── levels/            # One JSON file per campaign level
 ├── index.html
 └── src/
     ├── schemas/
@@ -22,12 +24,15 @@ pipstream/
     │   ├── types.ts           # RunState, GameConfig, GameNode, PlacementError, etc.
     │   ├── placementEngine.ts # Core placement / discard / save logic
     │   ├── scoring.ts         # computeScore() — DFS traversal with branch multipliers
+    │   ├── seededShuffle.ts   # mulberry32 PRNG + seeded Fisher-Yates shuffle
     │   └── tileTransform.ts   # getTileTransform() — pip orientation per branch angle
     ├── hooks/
     │   ├── useRunState.ts     # useReducer wrapper over the placement engine
     │   └── useFullscreen.ts   # Fullscreen API wrapper (toggle + isSupported)
     ├── lib/
-    │   └── leaderboard.ts     # localStorage leaderboard (getLeaderboard / addEntry / clearLeaderboard)
+    │   ├── leaderboard.ts     # localStorage leaderboard (getLeaderboard / addEntry / clearLeaderboard)
+    │   ├── completedLevels.ts # localStorage level stars + best scores; star threshold computation
+    │   └── sound.ts           # Fire-and-forget audio (placeholder; .mp3 files go in public/sounds/)
     ├── components/
     │   ├── DominoTile.tsx     # Pip-dot rendering (HTML HUD variant + SVG tree variant)
     │   ├── DominoBoard.tsx    # SVG board: pan/zoom, placed tiles, drag-and-drop targets
@@ -40,6 +45,7 @@ pipstream/
     ├── App.tsx
     ├── main.tsx
     └── __tests__/
+        ├── setup.ts
         ├── loader.test.ts
         ├── placementEngine.test.ts
         ├── gameplay.test.tsx
@@ -63,14 +69,20 @@ npm run typecheck # tsc --noEmit
 
 ## How to play
 
-1. **Select mode** — choose Save/Discard or Draw Five on the title screen.
-2. **Place** — drag a tile onto the tree. The root drop zone accepts the first tile; subsequent tiles connect to any open end. Green circles = legal connections, red = illegal during a drag. Tiles animate into position when placed.
-3. **Discard** — drop the pending tile without placing it (limit shown in HUD).
-4. **Save / Play Saved** *(Save/Discard mode)* — bank a tile to the save pool (cap shown) and replay it later.
-5. **Draw Five mode** — you always hold a hand of 5 tiles; drag any tile to place it. Re-rolls are free up to the limit, then cost a penalty discard.
-6. **End of run** — when the deck (and hand) are exhausted, the scoring animation plays, then the score screen with per-path breakdown appears. Enter a name to save your score.
-7. **Leaderboard** — accessible from the title screen; shows the top 100 scores across both modes, stored in `localStorage`.
-8. **Fullscreen** — toggle via the button in the top-right corner (on supported browsers).
+The title screen has three entry points:
+
+- **Levels** — a fixed campaign of seeded runs. Each level shows a star rating (0–3) and your best score. Stars are awarded at 60 / 80 / 100 % of the level's `nearOptimal` target.
+- **Free Play** — a randomly seeded Draw Five run with a custom-seed input if you want a repeatable game.
+- **Leaderboard** — shows the top 100 Free Play scores stored in `localStorage`.
+
+Once a run starts:
+
+1. **Place** — drag a tile onto the tree. The root drop zone accepts the first tile; subsequent tiles connect to any open end. Green circles = legal connections, red = illegal during a drag. Tiles animate into position when placed.
+2. **Discard** — drop the pending tile without placing it (limit shown in HUD).
+3. **Save / Play Saved** *(Save/Discard mode)* — bank a tile to the save pool (cap shown) and replay it later.
+4. **Draw Five mode** — you always hold a hand of 5 tiles; drag any tile to place it. Free re-rolls are available up to the limit; further re-rolls cost a penalty discard.
+5. **End of run** — when the deck (and hand) are exhausted, the scoring animation plays, then the score screen with per-path breakdown appears. Enter a name to save your score to the leaderboard (Free Play) or record stars for the level.
+6. **Fullscreen** — toggle via the button in the top-right corner (on supported browsers).
 
 ---
 
@@ -139,6 +151,28 @@ Explicit tile list with per-tile quantities (duplicates allowed for roguelike bu
 }
 ```
 
+### Level (`data/decks/levels/*.json`)
+
+Campaign levels are not a deck type — they reference a deck by ID and add a seed and scoring target.
+
+```json
+{
+  "id": "level-00006",
+  "name": "2",
+  "deckRef": "standard-double-six",
+  "seed": 6,
+  "targets": {
+    "nearOptimal": 3607
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `deckRef` | ID of any deck in `data/decks/` |
+| `seed` | Passed to `seededShuffle` — determines draw order; must never change once a level ships |
+| `targets.nearOptimal` | Score ceiling used to compute star thresholds (60 / 80 / 100 %) |
+
 ---
 
 ## Key design decisions
@@ -150,6 +184,9 @@ Explicit tile list with per-tile quantities (duplicates allowed for roguelike bu
 - **`doubleTriggerLog` in `RunState`** — every double placed (root or non-root) is appended here. No side effects yet; exists as a hook point for future power-up activations.
 - **Browser vs Node loaders** — `src/loader.ts` uses `fs` for tests and CI; `src/dataBundle.ts` uses `import.meta.glob` for the browser bundle. Same Zod schemas, no duplication.
 - **Leaderboard in `localStorage`** — top 100 entries sorted by score, keyed `pipstream_leaderboard`. `addEntry` merges, sorts, and trims in one call; safe to call on every run end.
+- **Level stars and scores in `localStorage`** — keyed `pipstream_level_stars` and `pipstream_level_scores`. `saveLevelStars` only writes if the new value beats the stored one; `computeStars` derives 0–3 stars from the level's `nearOptimal` target.
+- **`seededShuffle` uses mulberry32** — deterministic 32-bit PRNG (locked algorithm; changing it would invalidate all existing level seeds). Used for both campaign levels (fixed seed per level) and Free Play (random seed shown in the score screen for repeatability).
+- **Sound module is a placeholder** — `src/lib/sound.ts` exposes named sound actions (`tileDraw`, `tileSnap`, etc.) backed by `HTMLAudioElement` clones. All calls are fire-and-forget; missing files fail silently. Drop `.mp3` files into `public/sounds/` to activate them.
 - **`useFullscreen`** — thin wrapper around the Fullscreen API; `isSupported` guards the button so it's hidden on environments (e.g. iOS Safari) that don't support it.
 
 ---
@@ -160,4 +197,5 @@ Explicit tile list with per-tile quantities (duplicates allowed for roguelike bu
 - Meta-progression and unlocks
 - Player-controlled tile rotation / flipping as a game mechanic
 - Cosmetic themes
+- Sound assets — the sound module is wired up but no `.mp3` files are recorded yet
 - **Portrait mobile layout** — HUD should move to a bottom panel; tree gets full width (landscape already works)
