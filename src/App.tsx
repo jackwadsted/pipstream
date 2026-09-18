@@ -17,6 +17,8 @@ import { computeScore } from "./engine/scoring.js";
 import { useFullscreen } from "./hooks/useFullscreen.js";
 import { sound } from "./lib/sound.js";
 
+declare const __BUILD_TIME__: string;
+
 const SNAP_RADIUS = 56;
 // DominoTileHTML at size=44: two 44px pip grids + 2px divider
 const GHOST_TILE_W = 90;
@@ -616,6 +618,11 @@ export function App() {
               ))}
             </ol>
           </div>
+
+          {/* Build stamp */}
+          <p style={{ margin: 0, fontSize: 10, color: "#333", letterSpacing: "0.04em" }}>
+            {new Date(__BUILD_TIME__).toISOString().slice(0, 16).replace("T", " ")} UTC
+          </p>
         </div>
 
         {/* Leaderboard overlay */}
