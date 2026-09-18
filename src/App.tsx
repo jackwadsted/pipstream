@@ -13,6 +13,7 @@ import { Leaderboard } from "./components/Leaderboard.js";
 import { getLeaderboard, addEntry } from "./lib/leaderboard.js";
 import { getAllLevelStars, saveLevelStars, computeStars, starThreshold, saveLevelScore, getAllLevelScores } from "./lib/completedLevels.js";
 import { DominoTileHTML } from "./components/DominoTile.js";
+import { HomepageDemoAnimation } from "./components/HomepageDemoAnimation.js";
 import { computeScore } from "./engine/scoring.js";
 import { useFullscreen } from "./hooks/useFullscreen.js";
 import { sound } from "./lib/sound.js";
@@ -445,10 +446,10 @@ export function App() {
             <h1 style={{ fontSize: 60, fontWeight: 700, margin: "0 0 6px", letterSpacing: "0.04em", fontFamily: "'Quantico', 'IBM Plex Sans', system-ui, sans-serif" }}>
               pipstream
             </h1>
-            <p style={{ color: "#aaa", margin: 0, fontSize: 15 }}>
-              Build the chain. Branch the doubles. Score big.
-            </p>
           </div>
+
+          {/* Demo animation */}
+          <HomepageDemoAnimation />
 
           {!deck ? (
             <p style={{ color: "#666", fontSize: 14 }}>Loading…</p>
